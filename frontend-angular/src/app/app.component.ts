@@ -27,6 +27,7 @@ export class AppComponent implements OnInit {
     price: 0,
     category: "",
     stock: 0,
+    image_url: "",
   };
 
   get cartItemsCount(): number {
@@ -104,6 +105,7 @@ export class AppComponent implements OnInit {
       price: 0,
       category: "",
       stock: 0,
+      image_url: "",
     };
     this.showProductForm = true;
   }
@@ -116,8 +118,13 @@ export class AppComponent implements OnInit {
       price: Number(product.price),
       category: product.category || "",
       stock: product.stock,
+      image_url: product.image_url || "",
     };
     this.showProductForm = true;
+  }
+
+  get productImagePreviewUrl(): string {
+    return this.productForm.image_url.trim();
   }
 
   saveProduct() {

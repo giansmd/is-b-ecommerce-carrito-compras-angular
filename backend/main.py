@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, insert, update, delete, func, desc
+from sqlalchemy import select, insert, update, delete, func, desc, text
 from database import get_db, engine, Base, AsyncSessionLocal
 import models
 import schemas
@@ -83,6 +83,67 @@ def parse_date_range(start_date: str, end_date: str) -> tuple[datetime, datetime
     end_dt = datetime.combine(end + timedelta(days=1), time.min)
     return start_dt, end_dt
 
+
+DEFAULT_PRODUCTS = [
+    {
+        "name": "Laptop Gamer",
+        "description": "Laptop de alto rendimiento",
+        "price": 1500.00,
+        "category": "Electronica",
+        "stock": 10,
+        "image_url": "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1200&q=80",
+    },
+    {
+        "name": "Mouse Inalámbrico",
+        "description": "Mouse ergonómico",
+        "price": 25.50,
+        "category": "Accesorios",
+        "stock": 50,
+        "image_url": "https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&fit=crop&w=1200&q=80",
+    },
+    {
+        "name": "Teclado Mecánico",
+        "description": "Teclado RGB switch blue",
+        "price": 80.00,
+        "category": "Accesorios",
+        "stock": 20,
+        "image_url": "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=1200&q=80",
+    },
+    {
+        "name": "Monitor 27' 4K",
+        "description": "Monitor ultra HD",
+        "price": 450.00,
+        "category": "Electronica",
+        "stock": 15,
+        "image_url": "https://images.unsplash.com/photo-1527430253228-e93688616381?auto=format&fit=crop&w=1200&q=80",
+    },
+    {
+        "name": "Silla Ergonómica",
+        "description": "Silla para oficina",
+        "price": 200.00,
+        "category": "Muebles",
+        "stock": 5,
+        "image_url": "https://images.unsplash.com/photo-1505843513577-22bb7d21e455?auto=format&fit=crop&w=1200&q=80",
+    },
+]
+
+
+async def ensure_product_image_column(conn):
+    await conn.execute(text("ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url VARCHAR(500)"))
+
+
+async def seed_product_images(session):
+    for product_data in DEFAULT_PRODUCTS:
+        await session.execute(
+            update(models.Product)
+            .where(
+                models.Product.name == product_data["name"],
+                models.Product.image_url.is_(None),
+            )
+            .values(image_url=product_data["image_url"])
+        )
+    await session.commit()
+
 # Create reports directory (stable path regardless of working directory)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REPORTS_DIR = os.path.join(BASE_DIR, "reports")
@@ -94,6 +155,7 @@ app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await ensure_product_image_column(conn)
     
     async with AsyncSessionLocal() as session:
         # Check if users exist
@@ -111,15 +173,11 @@ async def startup():
         # Check if products exist
         result = await session.execute(select(models.Product))
         if not result.scalars().first():
-            products = [
-                models.Product(name="Laptop Gamer", description="Laptop de alto rendimiento", price=1500.00, category="Electronica", stock=10),
-                models.Product(name="Mouse Inalámbrico", description="Mouse ergonómico", price=25.50, category="Accesorios", stock=50),
-                models.Product(name="Teclado Mecánico", description="Teclado RGB switch blue", price=80.00, category="Accesorios", stock=20),
-                models.Product(name="Monitor 27' 4K", description="Monitor ultra HD", price=450.00, category="Electronica", stock=15),
-                models.Product(name="Silla Ergonómica", description="Silla para oficina", price=200.00, category="Muebles", stock=5),
-            ]
+            products = [models.Product(**product_data) for product_data in DEFAULT_PRODUCTS]
             session.add_all(products)
             await session.commit()
+        else:
+            await seed_product_images(session)
 
 # Endpoints
 @app.post("/api/auth/register", response_model=schemas.UserResponse)
@@ -161,7 +219,7 @@ async def create_product(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(require_admin),
 ):
-    new_product = models.Product(**product.dict())
+    new_product = models.Product(**product.model_dump())
     db.add(new_product)
     await db.commit()
     await db.refresh(new_product)

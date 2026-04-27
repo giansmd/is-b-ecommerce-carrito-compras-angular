@@ -19,6 +19,7 @@ class Product(Base):
     price = Column(Numeric(10, 2), nullable=False)
     category = Column(String(100))
     stock = Column(Integer, default=0)
+    image_url = Column(String(500))
     created_at = Column(DateTime, server_default=func.now())
 
 class Cart(Base):

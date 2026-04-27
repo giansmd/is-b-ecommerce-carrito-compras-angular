@@ -10,6 +10,7 @@ export interface Product {
   price: string | number;
   category?: string | null;
   stock: number;
+  image_url?: string | null;
 }
 
 export interface ProductCreate {
@@ -18,11 +19,15 @@ export interface ProductCreate {
   price: number;
   category?: string | null;
   stock: number;
+  image_url?: string | null;
 }
 
 @Injectable({ providedIn: "root" })
 export class ProductService {
-  constructor(private http: HttpClient, private auth: AuthService) {}
+  constructor(
+    private http: HttpClient,
+    private auth: AuthService,
+  ) {}
 
   list(): Observable<Product[]> {
     return this.http.get<Product[]>(`${this.auth.backendUrl}/api/products`);
@@ -33,7 +38,11 @@ export class ProductService {
     const headers = session
       ? new HttpHeaders().set("Authorization", `Bearer ${session.accessToken}`)
       : undefined;
-    return this.http.post<Product>(`${this.auth.backendUrl}/api/products`, product, { headers });
+    return this.http.post<Product>(
+      `${this.auth.backendUrl}/api/products`,
+      product,
+      { headers },
+    );
   }
 
   update(id: number, product: Partial<ProductCreate>): Observable<Product> {
@@ -41,7 +50,11 @@ export class ProductService {
     const headers = session
       ? new HttpHeaders().set("Authorization", `Bearer ${session.accessToken}`)
       : undefined;
-    return this.http.put<Product>(`${this.auth.backendUrl}/api/products/${id}`, product, { headers });
+    return this.http.put<Product>(
+      `${this.auth.backendUrl}/api/products/${id}`,
+      product,
+      { headers },
+    );
   }
 
   delete(id: number): Observable<any> {
@@ -49,6 +62,8 @@ export class ProductService {
     const headers = session
       ? new HttpHeaders().set("Authorization", `Bearer ${session.accessToken}`)
       : undefined;
-    return this.http.delete(`${this.auth.backendUrl}/api/products/${id}`, { headers });
+    return this.http.delete(`${this.auth.backendUrl}/api/products/${id}`, {
+      headers,
+    });
   }
 }

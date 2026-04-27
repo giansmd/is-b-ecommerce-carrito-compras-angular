@@ -56,17 +56,23 @@ El sistema incluye datos precargados para facilitar las pruebas. Al iniciar el b
 **Productos:**
 
 - Laptop Gamer, Mouse Inalámbrico, Teclado Mecánico, Monitor 27' 4K, Silla Ergonómica.
+- Cada producto inicial incluye `image_url` con imágenes libres alojadas en Unsplash para que el catálogo arranque con vista visual.
 
 ### Nuevas Funcionalidades
 
 1.  **Gestión de Productos (Admin)**:
     - Los usuarios con rol `admin` pueden añadir nuevos productos.
-    - Los usuarios con rol `admin` pueden editar productos existentes (nombre, categoría, precio, stock, descripción).
-    - Los usuarios con rol `admin` pueden eliminar productos.
+
+- Los usuarios con rol `admin` pueden editar productos existentes (nombre, categoría, precio, stock, descripción e imagen).
+  - Los usuarios con rol `admin` pueden eliminar productos.
+
 2.  **Interfaz de Administración**:
     - Botón "Añadir Producto" visible solo para administradores.
     - Opciones de "Editar" y "Eliminar" en cada tarjeta de producto para administradores.
-    - Formulario dinámico para creación/edición.
+
+- Formulario dinámico para creación/edición.
+- Campo de URL de imagen con vista previa inmediata antes de guardar.
+
 3.  **Carrito para Cliente con Cantidades y Validación de Stock**:
 
 - El usuario con rol `cliente` puede seleccionar cuántas unidades desea agregar por producto.
@@ -170,6 +176,7 @@ description TEXT,
 price DECIMAL(10,2) NOT NULL,
 category VARCHAR(100),
 stock INT DEFAULT 0,
+image_url VARCHAR(500),
 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -223,11 +230,11 @@ GET /api/products
 Response: [{"id":1,"name":"Producto A","price":100,"category":"Electrónica"}]
 
 POST /api/products (Admin only)
-Request: {"name":"Producto B","price":150,"category":"Ropa","stock":50}
+Request: {"name":"Producto B","price":150,"category":"Ropa","stock":50,"image_url":"https://..."}
 Response: {"id":2,"message":"Producto creado"}
 
 PUT /api/products/{product_id} (Admin only)
-Request: {"price":200,"stock":40}
+Request: {"price":200,"stock":40,"image_url":"https://..."}
 Response: {"id":2,"name":"Producto B","price":200,"stock":40}
 
 DELETE /api/products/{product_id} (Admin only)
