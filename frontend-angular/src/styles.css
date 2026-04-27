@@ -1,7 +1,26 @@
 /* You can add global styles to this file, and also import other style files */
 body {
-    background-color: #f8f9fa;
+    background: radial-gradient(1200px 800px at 20% 10%, rgba(13,110,253,0.10), rgba(255,255,255,0)),
+      radial-gradient(900px 600px at 80% 0%, rgba(32,201,151,0.08), rgba(255,255,255,0)),
+      #f8f9fa;
 }
 .navbar {
     margin-bottom: 2rem;
+}
+
+.card {
+    border-radius: 14px;
+    border-color: rgba(0,0,0,0.06);
+}
+
+.btn {
+    border-radius: 12px;
+}
+
+.form-control, .form-select, textarea.form-control {
+    border-radius: 12px;
+}
+
+.form-control:focus, .form-select:focus, textarea.form-control:focus {
+    box-shadow: 0 0 0 0.2rem rgba(13,110,253,0.15);
 }

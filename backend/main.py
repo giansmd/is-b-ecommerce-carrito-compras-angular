@@ -4,13 +4,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, insert, update, delete, func
+from sqlalchemy import select, insert, update, delete, func, desc
 from database import get_db, engine, Base, AsyncSessionLocal
 import models
 import schemas
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, time
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 import uuid
@@ -71,11 +71,24 @@ async def require_admin(current_user: models.User = Depends(get_current_user)) -
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return current_user
 
-# Create reports directory
-if not os.path.exists("reports"):
-    os.makedirs("reports")
+def parse_date_range(start_date: str, end_date: str) -> tuple[datetime, datetime]:
+    try:
+        start = datetime.fromisoformat(start_date).date()
+        end = datetime.fromisoformat(end_date).date()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.") from e
+    if end < start:
+        raise HTTPException(status_code=400, detail="end_date must be >= start_date")
+    start_dt = datetime.combine(start, time.min)
+    end_dt = datetime.combine(end + timedelta(days=1), time.min)
+    return start_dt, end_dt
 
-app.mount("/reports", StaticFiles(directory="reports"), name="reports")
+# Create reports directory (stable path regardless of working directory)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+REPORTS_DIR = os.path.join(BASE_DIR, "reports")
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
+app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
 
 @app.on_event("startup")
 async def startup():
@@ -260,31 +273,205 @@ async def checkout(data: dict, db: AsyncSession = Depends(get_db)):
 # Reports
 @app.post("/api/reports/operational")
 async def generate_operational_report(report_req: schemas.ReportRequest, db: AsyncSession = Depends(get_db)):
+    start_dt, end_dt = parse_date_range(report_req.start_date, report_req.end_date)
+    orders_stmt = (
+        select(models.Order.id, models.User.email, models.Order.total_amount, models.Order.order_date)
+        .join(models.User, models.User.id == models.Order.user_id)
+        .where(models.Order.order_date >= start_dt, models.Order.order_date < end_dt)
+        .order_by(models.Order.order_date.asc())
+    )
+    orders_result = await db.execute(orders_stmt)
+    orders = orders_result.all()
+
     pdf_filename = f"operational_{uuid.uuid4()}.pdf"
-    pdf_path = os.path.join("reports", pdf_filename)
+    pdf_path = os.path.join(REPORTS_DIR, pdf_filename)
     c = canvas.Canvas(pdf_path, pagesize=letter)
-    c.drawString(100, 750, f"Reporte Operacional: {report_req.start_date} a {report_req.end_date}")
+    y = 760
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(72, y, "Reporte Operacional")
+    y -= 20
+    c.setFont("Helvetica", 10)
+    c.drawString(72, y, f"Periodo: {report_req.start_date} a {report_req.end_date}")
+    y -= 16
+    c.drawString(72, y, f"Generado: {datetime.utcnow().isoformat(timespec='seconds')}Z")
+    y -= 24
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(72, y, "Pedidos")
+    y -= 18
+
+    c.setFont("Helvetica", 9)
+    if not orders:
+        c.drawString(72, y, "No hay pedidos en el rango seleccionado.")
+        y -= 14
+    else:
+        for order_id, email, total_amount, order_date in orders:
+            line = f"#{order_id} | {order_date.isoformat(sep=' ', timespec='seconds')} | {email} | Total: {float(total_amount):.2f}"
+            c.drawString(72, y, line)
+            y -= 12
+            if y < 72:
+                c.showPage()
+                y = 760
+                c.setFont("Helvetica", 9)
     c.save()
     return {"pdf_url": f"/reports/{pdf_filename}"}
 
 @app.post("/api/reports/management")
 async def generate_management_report(db: AsyncSession = Depends(get_db)):
+    totals_stmt = select(
+        func.count(models.Order.id),
+        func.coalesce(func.sum(models.Order.total_amount), 0),
+        func.coalesce(func.avg(models.Order.total_amount), 0),
+    )
+    totals_row = (await db.execute(totals_stmt)).one()
+    total_orders = int(totals_row[0] or 0)
+    total_revenue = float(totals_row[1] or 0)
+    avg_ticket = float(totals_row[2] or 0)
+
+    top_products_stmt = (
+        select(models.Product.name, func.coalesce(func.sum(models.OrderDetail.quantity), 0).label("ventas"))
+        .join(models.OrderDetail, models.OrderDetail.product_id == models.Product.id)
+        .group_by(models.Product.name)
+        .order_by(desc("ventas"))
+        .limit(10)
+    )
+    top_products = (await db.execute(top_products_stmt)).all()
+
+    category_sales_stmt = (
+        select(
+            func.coalesce(models.Product.category, "Sin categoría").label("categoria"),
+            func.coalesce(func.sum(models.OrderDetail.quantity * models.OrderDetail.price), 0).label("ingresos"),
+        )
+        .join(models.OrderDetail, models.OrderDetail.product_id == models.Product.id)
+        .group_by("categoria")
+        .order_by(desc("ingresos"))
+        .limit(10)
+    )
+    top_categories = (await db.execute(category_sales_stmt)).all()
+
     pdf_filename = f"management_{uuid.uuid4()}.pdf"
-    pdf_path = os.path.join("reports", pdf_filename)
+    pdf_path = os.path.join(REPORTS_DIR, pdf_filename)
     c = canvas.Canvas(pdf_path, pagesize=letter)
-    c.drawString(100, 750, "Reporte Gerencial")
+    y = 760
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(72, y, "Reporte Gerencial")
+    y -= 20
+    c.setFont("Helvetica", 10)
+    c.drawString(72, y, f"Generado: {datetime.utcnow().isoformat(timespec='seconds')}Z")
+    y -= 24
+
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(72, y, "Resumen")
+    y -= 18
+    c.setFont("Helvetica", 10)
+    c.drawString(72, y, f"Pedidos totales: {total_orders}")
+    y -= 14
+    c.drawString(72, y, f"Ingresos totales: {total_revenue:.2f}")
+    y -= 14
+    c.drawString(72, y, f"Ticket promedio: {avg_ticket:.2f}")
+    y -= 22
+
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(72, y, "Top Productos (por unidades)")
+    y -= 18
+    c.setFont("Helvetica", 10)
+    if not top_products:
+        c.drawString(72, y, "Sin ventas registradas.")
+        y -= 14
+    else:
+        for name, ventas in top_products:
+            c.drawString(72, y, f"- {name}: {int(ventas or 0)}")
+            y -= 14
+            if y < 72:
+                c.showPage()
+                y = 760
+                c.setFont("Helvetica", 10)
+
+    y -= 8
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(72, y, "Top Categorías (por ingresos)")
+    y -= 18
+    c.setFont("Helvetica", 10)
+    if not top_categories:
+        c.drawString(72, y, "Sin ventas registradas.")
+        y -= 14
+    else:
+        for categoria, ingresos in top_categories:
+            c.drawString(72, y, f"- {categoria}: {float(ingresos or 0):.2f}")
+            y -= 14
+            if y < 72:
+                c.showPage()
+                y = 760
+                c.setFont("Helvetica", 10)
     c.save()
     return {"pdf_url": f"/reports/{pdf_filename}"}
 
 # Stats
 @app.get("/api/stats/daily-sales")
 async def daily_sales(db: AsyncSession = Depends(get_db)):
-    return {"total_ventas_hoy": 1500, "ingresos_totales": 50000}
+    today = datetime.utcnow().date()
+    start_dt = datetime.combine(today, time.min)
+    end_dt = start_dt + timedelta(days=1)
+
+    today_stmt = select(
+        func.count(models.Order.id),
+        func.coalesce(func.sum(models.Order.total_amount), 0),
+    ).where(models.Order.order_date >= start_dt, models.Order.order_date < end_dt)
+    today_row = (await db.execute(today_stmt)).one()
+    orders_today = int(today_row[0] or 0)
+    revenue_today = float(today_row[1] or 0)
+
+    total_stmt = select(func.coalesce(func.sum(models.Order.total_amount), 0))
+    total_revenue = float((await db.execute(total_stmt)).scalar_one() or 0)
+
+    return {
+        "total_ventas_hoy": orders_today,
+        "ingresos_hoy": revenue_today,
+        "ingresos_totales": total_revenue,
+    }
 
 @app.get("/api/stats/top-products")
 async def top_products(db: AsyncSession = Depends(get_db)):
-    return [{"producto": "A", "ventas": 50}, {"producto": "B", "ventas": 30}]
+    stmt = (
+        select(models.Product.name, func.coalesce(func.sum(models.OrderDetail.quantity), 0).label("ventas"))
+        .join(models.OrderDetail, models.OrderDetail.product_id == models.Product.id)
+        .group_by(models.Product.name)
+        .order_by(desc("ventas"))
+        .limit(10)
+    )
+    rows = (await db.execute(stmt)).all()
+    return [{"producto": name, "ventas": int(ventas or 0)} for name, ventas in rows]
 
 @app.get("/api/stats/user-metrics")
 async def user_metrics(db: AsyncSession = Depends(get_db)):
-    return {"promedio_compra_usuario": 250, "frecuencia_compras": 2.5}
+    orders_count_stmt = select(func.count(models.Order.id))
+    total_orders = int((await db.execute(orders_count_stmt)).scalar_one() or 0)
+
+    distinct_users_stmt = select(func.count(func.distinct(models.Order.user_id)))
+    users_with_orders = int((await db.execute(distinct_users_stmt)).scalar_one() or 0)
+
+    avg_stmt = select(func.coalesce(func.avg(models.Order.total_amount), 0))
+    avg_order_total = float((await db.execute(avg_stmt)).scalar_one() or 0)
+
+    frequency = (total_orders / users_with_orders) if users_with_orders else 0
+    return {
+        "promedio_compra_usuario": avg_order_total,
+        "frecuencia_compras": round(frequency, 2),
+    }
+
+@app.get("/api/stats/category-sales")
+async def category_sales(db: AsyncSession = Depends(get_db)):
+    stmt = (
+        select(
+            func.coalesce(models.Product.category, "Sin categoría").label("categoria"),
+            func.coalesce(func.sum(models.OrderDetail.quantity), 0).label("ventas"),
+            func.coalesce(func.sum(models.OrderDetail.quantity * models.OrderDetail.price), 0).label("ingresos"),
+        )
+        .join(models.OrderDetail, models.OrderDetail.product_id == models.Product.id)
+        .group_by("categoria")
+        .order_by(desc("ingresos"))
+    )
+    rows = (await db.execute(stmt)).all()
+    return [
+        {"categoria": categoria, "ventas": int(ventas or 0), "ingresos": float(ingresos or 0)}
+        for categoria, ventas, ingresos in rows
+    ]

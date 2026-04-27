@@ -43,18 +43,22 @@ Este proyecto está diseñado para ser desplegado como tres servicios separados 
 5. Configura las variables de entorno mencionadas arriba.
 
 ### Datos Iniciales (Seed)
+
 El sistema incluye datos precargados para facilitar las pruebas. Al iniciar el backend, se crearán automáticamente:
 
 **Usuarios:**
+
 - **Admin**: `admin@example.com` / `admin123` (Rol: admin)
 - **Vendedor**: `vendedor@example.com` / `vendedor123` (Rol: admin)
 - **Cliente 1**: `cliente1@example.com` / `cliente123` (Rol: cliente)
 - **Cliente 2**: `cliente2@example.com` / `cliente123` (Rol: cliente)
 
 **Productos:**
+
 - Laptop Gamer, Mouse Inalámbrico, Teclado Mecánico, Monitor 27' 4K, Silla Ergonómica.
 
 ### Nuevas Funcionalidades
+
 1.  **Gestión de Productos (Admin)**:
     - Los usuarios con rol `admin` pueden añadir nuevos productos.
     - Los usuarios con rol `admin` pueden editar productos existentes (nombre, categoría, precio, stock, descripción).
@@ -74,6 +78,36 @@ docker-compose up --build
 - Dashboard: http://localhost:8501
 - Backend API: http://localhost:8000
 - Swagger UI: http://localhost:8000/docs
+
+### Variables de Entorno
+
+**Backend (FastAPI)**
+
+- `DATABASE_URL`: DSN de PostgreSQL. En Docker Compose se usa `postgresql+asyncpg://postgres:password@postgres:5432/shopping_db`.
+- `SECRET_KEY`: clave para JWT.
+
+**Frontend (Angular)**
+
+- `BACKEND_URL`: URL pública del backend.
+  - En Docker, el contenedor escribe `assets/env.js` al iniciar (ver `frontend-angular/entrypoint.sh`).
+  - En el navegador, `AuthService` lee `window.env.BACKEND_URL` y, si no existe, usa `http://localhost:8000`.
+
+**Dashboard (Streamlit)**
+
+- `BACKEND_URL`: URL pública del backend (por defecto `http://localhost:8000`).
+
+### Reportes y Métricas
+
+**Reportes PDF**
+
+- Se generan en el backend y quedan disponibles como archivos estáticos bajo `/reports`.
+- Ejemplo: si el endpoint devuelve `{"pdf_url":"/reports/management_xxx.pdf"}`, se abre en `http://localhost:8000/reports/management_xxx.pdf`.
+
+**Métricas (Dashboard)**
+
+- `GET /api/stats/daily-sales`: devuelve pedidos de hoy, ingresos de hoy e ingresos acumulados.
+- `GET /api/stats/top-products`: top por unidades vendidas (usa `order_details` + `products`).
+- `GET /api/stats/category-sales`: distribución por categoría (ingresos y unidades).
   Flujo de Datos:
 
 Usuario interactúa con Angular (gestión usuarios/carrito) o Streamlit (dashboard)
@@ -191,151 +225,37 @@ Response: {"pdf_url":"/reports/management_456.pdf"}
 Estadísticas Dashboard
 http
 GET /api/stats/daily-sales
-Response: {"total_ventas_hoy":1500,"ingresos_totales":50000}
+Response: {"total_ventas_hoy":3,"ingresos_hoy":120.50,"ingresos_totales":50000.00}
 
 GET /api/stats/top-products
-Response: [{"producto":"A","ventas":50},{"producto":"B","ventas":30}]
+Response: [{"producto":"Laptop Gamer","ventas":12},{"producto":"Mouse Inalámbrico","ventas":9}]
 
 GET /api/stats/user-metrics
 Response: {"promedio_compra_usuario":250,"frecuencia_compras":2.5}
-Fragmentos de Código
-Backend - main.py (FastAPI)
-python
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.security import HTTPBearer
-import asyncpg
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+GET /api/stats/category-sales
+Response: [{"categoria":"Electronica","ventas":12,"ingresos":1234.50}]
 
-app = FastAPI()
-security = HTTPBearer()
+Código fuente (referencias)
 
-# Conexión BD
-
-async def get_db():
-conn = await asyncpg.connect(
-host="localhost", database="shopping_db",
-user="postgres", password="password"
-)
-return conn
-
-# Endpoint: Agregar al carrito
-
-@app.post("/api/cart/add")
-async def add_to_cart(user_id: int, product_id: int, quantity: int, db=Depends(get_db)): # Verificar stock
-product = await db.fetchrow("SELECT price, stock FROM products WHERE id = $1", product_id)
-if not product:
-raise HTTPException(404, "Producto no existe")
-if product['stock'] < quantity:
-raise HTTPException(400, "Stock insuficiente")
-
-    # Obtener o crear carrito activo
-    cart = await db.fetchrow("SELECT id FROM carts WHERE user_id = $1 AND status = 'activo'", user_id)
-    if not cart:
-        cart = await db.fetchrow("INSERT INTO carts (user_id) VALUES ($1) RETURNING id", user_id)
-
-    # Agregar item
-    await db.execute("""
-        INSERT INTO cart_items (cart_id, product_id, quantity, price_at_time)
-        VALUES ($1, $2, $3, $4)
-    """, cart['id'], product_id, quantity, product['price'])
-
-    return {"message": "Producto agregado al carrito"}
-
-# Generar reporte PDF
-
-@app.post("/api/reports/operational")
-async def generate_operational_report(start_date: str, end_date: str, db=Depends(get_db)):
-orders = await db.fetch("""
-SELECT o.id, u.email, o.total_amount, o.order_date
-FROM orders o JOIN users u ON o.user_id = u.id
-WHERE o.order_date BETWEEN $1 AND $2
-""", start_date, end_date)
-
-    pdf_path = f"reports/operational_{start_date}_{end_date}.pdf"
-    c = canvas.Canvas(pdf_path, pagesize=letter)
-    c.drawString(100, 750, f"Reporte de Pedidos: {start_date} a {end_date}")
-    y = 700
-    for order in orders:
-        c.drawString(100, y, f"Pedido #{order['id']} - {order['email']} - ${order['total_amount']}")
-        y -= 20
-    c.save()
-    return {"pdf_url": f"/{pdf_path}"}
-
-Frontend Angular - src/app/services/cart.service.ts
-typescript
-import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-
-@Injectable({providedIn: 'root'})
-export class CartService {
-private apiUrl = 'http://localhost:8000/api';
-
-constructor(private http: HttpClient) {}
-
-addToCart(productId: number, quantity: number, token: string) {
-const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
-return this.http.post(`${this.apiUrl}/cart/add`,
-{ user_id: 1, product_id: productId, quantity },
-{ headers });
-}
-
-checkout(token: string) {
-return this.http.post(`${this.apiUrl}/cart/checkout`,
-{ user_id: 1 },
-{ headers: new HttpHeaders().set('Authorization', `Bearer ${token}`) });
-}
-
-downloadReport(startDate: string, endDate: string, type: string, token: string) {
-const url = `${this.apiUrl}/reports/${type}`;
-return this.http.post(url, { start_date: startDate, end_date: endDate },
-{ responseType: 'blob', headers: new HttpHeaders().set('Authorization', `Bearer ${token}`) });
-}
-}
-Dashboard Streamlit - dashboard/app.py
-python
-import streamlit as st
-import requests
-import pandas as pd
-import plotly.express as px
-
-API_URL = "http://localhost:8000/api"
-
-st.set_page_config(page_title="Dashboard Ventas", layout="wide")
-st.title("📊 Dashboard de Métricas")
-
-# Obtener métricas
-
-daily = requests.get(f"{API_URL}/stats/daily-sales").json()
-st.metric("Ventas del día", f"${daily['total_ventas_hoy']}")
-st.metric("Ingresos totales", f"${daily['ingresos_totales']}")
-
-# Gráfico: Productos más vendidos
-
-top_products = requests.get(f"{API_URL}/stats/top-products").json()
-df = pd.DataFrame(top_products)
-fig = px.bar(df, x='producto', y='ventas', title='Productos Más Vendidos')
-st.plotly_chart(fig)
-
-# Estadísticas usuarios
-
-user_stats = requests.get(f"{API_URL}/stats/user-metrics").json()
-col1, col2 = st.columns(2)
-col1.metric("Promedio compra/usuario", f"${user_stats['promedio_compra_usuario']}")
-col2.metric("Frecuencia compras/mes", f"{user_stats['frecuencia_compras']} veces")
-Configuración y Despliegue
-Docker Compose (docker-compose.yml)
-yaml
-version: '3.8'
-services:
-postgres:
-image: postgres:15
-environment:
-POSTGRES_DB: shopping_db
-POSTGRES_USER: postgres
-POSTGRES_PASSWORD: password
-ports: - "5432:5432"
-volumes: - postgres_data:/var/lib/postgresql/data
+- Backend (FastAPI): backend/main.py
+- Modelos SQLAlchemy: backend/models.py
+- Esquemas Pydantic: backend/schemas.py
+- Inicialización/seed: backend/init_db.py (opcional; también hay seed en startup)
+- Frontend Angular: frontend-angular/src/app/app.component.(ts|html) y frontend-angular/src/app/services/\*.ts
+- Dashboard Streamlit: dashboard/app.py
+  Configuración y Despliegue
+  Docker Compose (docker-compose.yml)
+  yaml
+  version: '3.8'
+  services:
+  postgres:
+  image: postgres:15
+  environment:
+  POSTGRES_DB: shopping_db
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: password
+  ports: - "5433:5432"
+  volumes: - postgres_data:/var/lib/postgresql/data
 
 backend:
 build: ./backend
@@ -399,7 +319,7 @@ bash
 # Backend
 
 cd backend
-pip install fastapi uvicorn asyncpg reportlab python-multipart
+pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 
 # Angular
