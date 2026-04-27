@@ -94,7 +94,10 @@ docker-compose up --build
 
 **Dashboard (Streamlit)**
 
-- `BACKEND_URL`: URL pública del backend (por defecto `http://localhost:8000`).
+- `BACKEND_URL`: URL interna para llamadas API desde Streamlit.
+  - En Docker Compose para el servicio `dashboard`, usar `http://backend:8000` (DNS interno de Docker).
+- `BACKEND_PUBLIC_URL`: URL pública usada para enlaces que abre el navegador (por ejemplo, PDFs).
+  - Valor recomendado en local con Docker Compose: `http://localhost:8000`.
 
 ### Reportes y Métricas
 

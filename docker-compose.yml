@@ -40,7 +40,8 @@ services:
     depends_on:
       - backend
     environment:
-      - BACKEND_URL=http://localhost:8000
+      - BACKEND_URL=http://backend:8000
+      - BACKEND_PUBLIC_URL=http://localhost:8000
 
 volumes:
   postgres_data:

@@ -3,7 +3,9 @@
     <a class="navbar-brand" href="#">E-Commerce UNT</a>
     <div class="d-flex" *ngIf="isLoggedIn">
       <span class="navbar-text me-3 text-white">Hola, {{ email }}</span>
-      <button class="btn btn-outline-light btn-sm" (click)='logout()'>Cerrar Sesión</button>
+      <button class="btn btn-outline-light btn-sm" (click)="logout()">
+        Cerrar Sesión
+      </button>
     </div>
   </div>
 </nav>
@@ -17,13 +19,19 @@
           <h3 class="card-title text-center">Login</h3>
           <div class="mb-3">
             <label class="form-label">Email</label>
-            <input type="email" class="form-control" [(ngModel)]="email">
+            <input type="email" class="form-control" [(ngModel)]="email" />
           </div>
           <div class="mb-3">
             <label class="form-label">Password</label>
-            <input type="password" class="form-control" [(ngModel)]="password">
+            <input
+              type="password"
+              class="form-control"
+              [(ngModel)]="password"
+            />
           </div>
-          <button class="btn btn-primary w-100" (click)="login()">Ingresar</button>
+          <button class="btn btn-primary w-100" (click)="login()">
+            Ingresar
+          </button>
         </div>
       </div>
     </div>
@@ -34,38 +42,69 @@
     <div class="col-md-8">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h3>Nuestros Productos</h3>
-        <button *ngIf="isAdmin" class="btn btn-primary" (click)="openAddProduct()">Añadir Producto</button>
+        <button
+          *ngIf="isAdmin"
+          class="btn btn-primary"
+          (click)="openAddProduct()"
+        >
+          Añadir Producto
+        </button>
       </div>
 
       <!-- Product Form -->
       <div *ngIf="showProductForm" class="card mb-4 shadow-sm border-primary">
         <div class="card-body">
-          <h4 class="card-title">{{ editingProduct ? 'Editar' : 'Nuevo' }} Producto</h4>
+          <h4 class="card-title">
+            {{ editingProduct ? "Editar" : "Nuevo" }} Producto
+          </h4>
           <div class="row">
             <div class="col-md-6 mb-2">
               <label class="form-label">Nombre</label>
-              <input type="text" class="form-control" [(ngModel)]="productForm.name">
+              <input
+                type="text"
+                class="form-control"
+                [(ngModel)]="productForm.name"
+              />
             </div>
             <div class="col-md-6 mb-2">
               <label class="form-label">Categoría</label>
-              <input type="text" class="form-control" [(ngModel)]="productForm.category">
+              <input
+                type="text"
+                class="form-control"
+                [(ngModel)]="productForm.category"
+              />
             </div>
             <div class="col-md-4 mb-2">
               <label class="form-label">Precio</label>
-              <input type="number" class="form-control" [(ngModel)]="productForm.price">
+              <input
+                type="number"
+                class="form-control"
+                [(ngModel)]="productForm.price"
+              />
             </div>
             <div class="col-md-4 mb-2">
               <label class="form-label">Stock</label>
-              <input type="number" class="form-control" [(ngModel)]="productForm.stock">
+              <input
+                type="number"
+                class="form-control"
+                [(ngModel)]="productForm.stock"
+              />
             </div>
             <div class="col-md-12 mb-3">
               <label class="form-label">Descripción</label>
-              <textarea class="form-control" [(ngModel)]="productForm.description"></textarea>
+              <textarea
+                class="form-control"
+                [(ngModel)]="productForm.description"
+              ></textarea>
             </div>
           </div>
           <div class="d-flex gap-2">
-            <button class="btn btn-success" (click)="saveProduct()">Guardar</button>
-            <button class="btn btn-secondary" (click)="showProductForm = false">Cancelar</button>
+            <button class="btn btn-success" (click)="saveProduct()">
+              Guardar
+            </button>
+            <button class="btn btn-secondary" (click)="showProductForm = false">
+              Cancelar
+            </button>
           </div>
         </div>
       </div>
@@ -77,13 +116,30 @@
               <h5 class="card-title">{{ p.name }}</h5>
               <p class="card-text text-muted small mb-1">{{ p.category }}</p>
               <p class="card-text small text-truncate">{{ p.description }}</p>
-              <p class="card-text"><strong>${{ p.price }}</strong> <span class="badge bg-light text-dark ms-2">Stock: {{ p.stock }}</span></p>
-              
+              <p class="card-text">
+                <strong>${{ p.price }}</strong>
+                <span class="badge bg-light text-dark ms-2"
+                  >Stock: {{ p.stock }}</span
+                >
+              </p>
+
               <div class="d-grid gap-2">
-                <button class="btn btn-success btn-sm" (click)="addToCart(p)">Añadir al Carrito</button>
+                <button class="btn btn-success btn-sm" (click)="addToCart(p)">
+                  Añadir al Carrito
+                </button>
                 <div *ngIf="isAdmin" class="btn-group w-100">
-                  <button class="btn btn-outline-warning btn-sm" (click)="openEditProduct(p)">Editar</button>
-                  <button class="btn btn-outline-danger btn-sm" (click)="deleteProduct(p.id)">Eliminar</button>
+                  <button
+                    class="btn btn-outline-warning btn-sm"
+                    (click)="openEditProduct(p)"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    class="btn btn-outline-danger btn-sm"
+                    (click)="deleteProduct(p.id)"
+                  >
+                    Eliminar
+                  </button>
                 </div>
               </div>
             </div>
@@ -98,34 +154,55 @@
         <div class="card-body">
           <h4>Carrito ({{ cart.length }})</h4>
           <ul class="list-group list-group-flush mb-3">
-            <li class="list-group-item d-flex justify-content-between align-items-center" *ngFor="let item of cart">
+            <li
+              class="list-group-item d-flex justify-content-between align-items-center"
+              *ngFor="let item of cart"
+            >
               {{ item.name }}
               <span>${{ item.price }}</span>
             </li>
           </ul>
           <div *ngIf="cart.length > 0">
-            <button class="btn btn-primary w-100" (click)="checkout()">Pagar Ahora</button>
+            <button class="btn btn-primary w-100" (click)="checkout()">
+              Pagar Ahora
+            </button>
           </div>
           <div *ngIf="cart.length === 0" class="text-center text-muted">
             El carrito está vacío
           </div>
-          <hr />
-          <h5 class="mb-3">Reportes</h5>
-          <div class="mb-2">
-            <label class="form-label">Inicio</label>
-            <input type="date" class="form-control" [(ngModel)]="reportStartDate" />
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Fin</label>
-            <input type="date" class="form-control" [(ngModel)]="reportEndDate" />
-          </div>
-          <div class="d-grid gap-2">
-            <button class="btn btn-outline-secondary" (click)="generateOperationalReport()">
-              Reporte Operacional
-            </button>
-            <button class="btn btn-outline-secondary" (click)="generateManagementReport()">
-              Reporte Gerencial
-            </button>
+          <div *ngIf="isAdmin">
+            <hr />
+            <h5 class="mb-3">Reportes</h5>
+            <div class="mb-2">
+              <label class="form-label">Inicio</label>
+              <input
+                type="date"
+                class="form-control"
+                [(ngModel)]="reportStartDate"
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Fin</label>
+              <input
+                type="date"
+                class="form-control"
+                [(ngModel)]="reportEndDate"
+              />
+            </div>
+            <div class="d-grid gap-2">
+              <button
+                class="btn btn-outline-secondary"
+                (click)="generateOperationalReport()"
+              >
+                Reporte Operacional
+              </button>
+              <button
+                class="btn btn-outline-secondary"
+                (click)="generateManagementReport()"
+              >
+                Reporte Gerencial
+              </button>
+            </div>
           </div>
         </div>
       </div>

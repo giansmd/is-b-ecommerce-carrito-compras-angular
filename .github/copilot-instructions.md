@@ -1,0 +1,6 @@
+- Utilizar README.md para documentación del proyecto.
+- Cuando vayas a hacer instalaciones de npm, utiliza el mcp de Context7 para tener las versiones actualizadas y compatibles de los paquetes 
+- Antes de implementar cualquier feature que use una librería externa, consulta primero su documentación actual mediante MCP o documentación local. No inventes APIs.
+- Escribir documentación y comentarios, actualizar README.md constantemente.
+- Mantener archivos de menos de 500 líneas.
+- Si Docker está en el stack del proyecto, utiliza docker compose up --build para las pruebas en lugar de npm install y npm build
