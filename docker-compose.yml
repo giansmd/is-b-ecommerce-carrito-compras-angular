@@ -22,21 +22,23 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/shopping_db
       SECRET_KEY: your-secret-key-here
 
-  # Placeholder for frontend and dashboard
-  # These will be implemented later
-  # angular:
-  #   build: ./frontend-angular
-  #   ports:
-  #     - "4200:80"
-  #   depends_on:
-  #     - backend
+  frontend-angular:
+    build: ./frontend-angular
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend
+    environment:
+      - BACKEND_URL=http://backend:8000
 
-  # streamlit:
-  #   build: ./dashboard
-  #   ports:
-  #     - "8501:8501"
-  #   depends_on:
-  #     - backend
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    environment:
+      - BACKEND_URL=http://backend:8000
 
 volumes:
   postgres_data:

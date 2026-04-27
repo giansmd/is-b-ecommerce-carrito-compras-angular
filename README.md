@@ -4,42 +4,55 @@ Estructura del Proyecto
 ```text
 .
 ├── backend/                # FastAPI Backend
-│   ├── Dockerfile
-│   ├── main.py
-│   ├── models.py
-│   ├── schemas.py
-│   ├── database.py
-│   ├── init_db.py
-│   └── requirements.txt
-├── frontend-angular/      # Angular Frontend (Por implementar)
-├── dashboard/             # Streamlit Dashboard (Por implementar)
+├── frontend-angular/      # Angular Frontend
+├── dashboard/             # Streamlit Dashboard
 ├── docker-compose.yml     # Orquestación Docker
-├── railway.json           # Configuración Railway
+├── railway.json           # Configuración Railway (Backend)
 └── README.md
 ```
 
-Arquitectura del Sistema
-text
-┌─────────────────────────────────────────────────────────────┐
-│ CLIENTE │
-├──────────────────┬──────────────────┬───────────────────────┤
-│ Angular App │ Streamlit App │ │
-│ (Puerto:4200) │ (Puerto:8501) │ │
-└────────┬─────────┴────────┬─────────┘ │
-│ │ │
-└──────────┬───────┘ │
-│ │
-┌──────────▼──────────┐ │
-│ FastAPI Backend │ │
-│ (Puerto:8000) │ │
-└──────────┬──────────┘ │
-│ │
-┌──────────▼──────────┐ │
-│ PostgreSQL │ │
-│ (Puerto:5432) │ │
-└─────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-Flujo de Datos:
+### Despliegue en Railway (3 Servicios Independientes)
+
+Este proyecto está diseñado para ser desplegado como tres servicios separados en Railway desde el mismo repositorio:
+
+1.  **Backend (FastAPI)**:
+    - **Root Directory**: `backend`
+    - **Variables**:
+      - `DATABASE_URL`: (Generada por el plugin PostgreSQL de Railway)
+      - `SECRET_KEY`: Una cadena aleatoria para JWT.
+    - **Configuración**: Railway detectará automáticamente el `Dockerfile` dentro de la carpeta `backend`.
+
+2.  **Frontend (Angular)**:
+    - **Root Directory**: `frontend-angular`
+    - **Variables**:
+      - `BACKEND_URL`: La URL pública de tu servicio Backend (ej: `https://backend-production.up.railway.app`).
+    - **Configuración**: Railway usará el `Dockerfile` multietapa (Build con Node, Serve con Nginx).
+
+3.  **Dashboard (Streamlit)**:
+    - **Root Directory**: `dashboard`
+    - **Variables**:
+      - `BACKEND_URL`: La URL pública de tu servicio Backend.
+    - **Configuración**: Railway detectará el `Dockerfile` de Streamlit.
+
+### Pasos para el Despliegue:
+
+1. Crea un nuevo proyecto en Railway.
+2. Agrega una base de datos PostgreSQL.
+3. Agrega 3 servicios de GitHub, todos apuntando a este repositorio.
+4. Para cada servicio, ve a **Settings > General > Root Directory** y asigna la carpeta correspondiente (`backend`, `frontend-angular`, o `dashboard`).
+5. Configura las variables de entorno mencionadas arriba.
+
+### Ejecución Local con Docker
+
+```bash
+docker-compose up --build
+```
+
+- Angular: http://localhost:4200
+- Dashboard: http://localhost:8501
+- Backend API: http://localhost:8000
+- Swagger UI: http://localhost:8000/docs
+  Flujo de Datos:
 
 Usuario interactúa con Angular (gestión usuarios/carrito) o Streamlit (dashboard)
 

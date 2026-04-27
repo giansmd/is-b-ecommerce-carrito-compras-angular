@@ -7,13 +7,13 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Environment variables
-ENV DATABASE_URL=postgresql+asyncpg://postgres:password@postgres:5432/shopping_db
+# Environment variables (Defaults, should be overridden in Railway)
+ENV DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/shopping_db
 ENV SECRET_KEY=your-secret-key-here
 
 EXPOSE 8000
