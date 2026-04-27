@@ -81,20 +81,32 @@ app.mount("/reports", StaticFiles(directory="reports"), name="reports")
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    admin_email = os.getenv("ADMIN_EMAIL")
-    admin_password = os.getenv("ADMIN_PASSWORD")
-    if admin_email and admin_password:
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(select(models.User).where(models.User.email == admin_email))
-            existing = result.scalar_one_or_none()
-            if not existing:
-                admin = models.User(
-                    email=admin_email,
-                    password_hash=get_password_hash(admin_password),
-                    role="admin",
-                )
-                session.add(admin)
-                await session.commit()
+    
+    async with AsyncSessionLocal() as session:
+        # Check if users exist
+        result = await session.execute(select(models.User))
+        if not result.scalars().first():
+            users = [
+                models.User(email="admin@example.com", password_hash=get_password_hash("admin123"), role="admin"),
+                models.User(email="cliente1@example.com", password_hash=get_password_hash("cliente123"), role="cliente"),
+                models.User(email="cliente2@example.com", password_hash=get_password_hash("cliente123"), role="cliente"),
+                models.User(email="vendedor@example.com", password_hash=get_password_hash("vendedor123"), role="admin"),
+            ]
+            session.add_all(users)
+            await session.commit()
+
+        # Check if products exist
+        result = await session.execute(select(models.Product))
+        if not result.scalars().first():
+            products = [
+                models.Product(name="Laptop Gamer", description="Laptop de alto rendimiento", price=1500.00, category="Electronica", stock=10),
+                models.Product(name="Mouse Inalámbrico", description="Mouse ergonómico", price=25.50, category="Accesorios", stock=50),
+                models.Product(name="Teclado Mecánico", description="Teclado RGB switch blue", price=80.00, category="Accesorios", stock=20),
+                models.Product(name="Monitor 27' 4K", description="Monitor ultra HD", price=450.00, category="Electronica", stock=15),
+                models.Product(name="Silla Ergonómica", description="Silla para oficina", price=200.00, category="Muebles", stock=5),
+            ]
+            session.add_all(products)
+            await session.commit()
 
 # Endpoints
 @app.post("/api/auth/register", response_model=schemas.UserResponse)

@@ -42,6 +42,28 @@ Este proyecto está diseñado para ser desplegado como tres servicios separados 
 4. Para cada servicio, ve a **Settings > General > Root Directory** y asigna la carpeta correspondiente (`backend`, `frontend-angular`, o `dashboard`).
 5. Configura las variables de entorno mencionadas arriba.
 
+### Datos Iniciales (Seed)
+El sistema incluye datos precargados para facilitar las pruebas. Al iniciar el backend, se crearán automáticamente:
+
+**Usuarios:**
+- **Admin**: `admin@example.com` / `admin123` (Rol: admin)
+- **Vendedor**: `vendedor@example.com` / `vendedor123` (Rol: admin)
+- **Cliente 1**: `cliente1@example.com` / `cliente123` (Rol: cliente)
+- **Cliente 2**: `cliente2@example.com` / `cliente123` (Rol: cliente)
+
+**Productos:**
+- Laptop Gamer, Mouse Inalámbrico, Teclado Mecánico, Monitor 27' 4K, Silla Ergonómica.
+
+### Nuevas Funcionalidades
+1.  **Gestión de Productos (Admin)**:
+    - Los usuarios con rol `admin` pueden añadir nuevos productos.
+    - Los usuarios con rol `admin` pueden editar productos existentes (nombre, categoría, precio, stock, descripción).
+    - Los usuarios con rol `admin` pueden eliminar productos.
+2.  **Interfaz de Administración**:
+    - Botón "Añadir Producto" visible solo para administradores.
+    - Opciones de "Editar" y "Eliminar" en cada tarjeta de producto para administradores.
+    - Formulario dinámico para creación/edición.
+
 ### Ejecución Local con Docker
 
 ```bash
