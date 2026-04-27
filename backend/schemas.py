@@ -30,6 +30,13 @@ class ProductBase(BaseModel):
     category: Optional[str] = None
     stock: int
 
+class ProductUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[Decimal] = None
+    category: Optional[str] = None
+    stock: Optional[int] = None
+
 class ProductResponse(ProductBase):
     id: int
     created_at: datetime

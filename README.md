@@ -138,6 +138,13 @@ Response: [{"id":1,"name":"Producto A","price":100,"category":"Electrónica"}]
 POST /api/products (Admin only)
 Request: {"name":"Producto B","price":150,"category":"Ropa","stock":50}
 Response: {"id":2,"message":"Producto creado"}
+
+PUT /api/products/{product_id} (Admin only)
+Request: {"price":200,"stock":40}
+Response: {"id":2,"name":"Producto B","price":200,"stock":40}
+
+DELETE /api/products/{product_id} (Admin only)
+Response: {"message":"Producto eliminado"}
 Carrito
 http
 POST /api/cart/add
@@ -233,7 +240,7 @@ WHERE o.order_date BETWEEN $1 AND $2
     c.save()
     return {"pdf_url": f"/{pdf_path}"}
 
-Frontend Angular - cart.service.ts
+Frontend Angular - src/app/services/cart.service.ts
 typescript
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
@@ -263,7 +270,7 @@ return this.http.post(url, { start_date: startDate, end_date: endDate },
 { responseType: 'blob', headers: new HttpHeaders().set('Authorization', `Bearer ${token}`) });
 }
 }
-Dashboard Streamlit - dashboard.py
+Dashboard Streamlit - dashboard/app.py
 python
 import streamlit as st
 import requests
@@ -363,7 +370,7 @@ docker-compose up -d
 
 # 4. Crear admin inicial (ejecutar en backend)
 
-docker-compose exec backend python init_db.py
+ADMIN_EMAIL=admin@mail.com ADMIN_PASSWORD=changeme docker-compose exec backend python init_db.py
 Configuración Manual (sin Docker)
 bash
 
@@ -383,7 +390,7 @@ ng serve --port 4200
 
 cd dashboard
 pip install streamlit requests pandas plotly
-streamlit run dashboard.py --port 8501
+streamlit run app.py --port 8501
 Notas Importantes
 JWT tokens expiran en 24 horas
 

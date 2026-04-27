@@ -64,6 +64,24 @@
           <div *ngIf="cart.length === 0" class="text-center text-muted">
             El carrito está vacío
           </div>
+          <hr />
+          <h5 class="mb-3">Reportes</h5>
+          <div class="mb-2">
+            <label class="form-label">Inicio</label>
+            <input type="date" class="form-control" [(ngModel)]="reportStartDate" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Fin</label>
+            <input type="date" class="form-control" [(ngModel)]="reportEndDate" />
+          </div>
+          <div class="d-grid gap-2">
+            <button class="btn btn-outline-secondary" (click)="generateOperationalReport()">
+              Reporte Operacional
+            </button>
+            <button class="btn btn-outline-secondary" (click)="generateManagementReport()">
+              Reporte Gerencial
+            </button>
+          </div>
         </div>
       </div>
     </div>

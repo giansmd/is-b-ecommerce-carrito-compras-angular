@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Text, Decimal
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -16,7 +16,7 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     description = Column(Text)
-    price = Column(Decimal(10, 2), nullable=False)
+    price = Column(Numeric(10, 2), nullable=False)
     category = Column(String(100))
     stock = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())
@@ -36,7 +36,7 @@ class CartItem(Base):
     cart_id = Column(Integer, ForeignKey("carts.id"))
     product_id = Column(Integer, ForeignKey("products.id"))
     quantity = Column(Integer, nullable=False)
-    price_at_time = Column(Decimal(10, 2), nullable=False)
+    price_at_time = Column(Numeric(10, 2), nullable=False)
     
     cart = relationship("Cart", back_populates="items")
     product = relationship("Product")
@@ -45,7 +45,7 @@ class Order(Base):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
-    total_amount = Column(Decimal(10, 2), nullable=False)
+    total_amount = Column(Numeric(10, 2), nullable=False)
     status = Column(String(50), default="completado")
     order_date = Column(DateTime, server_default=func.now())
 
@@ -55,4 +55,4 @@ class OrderDetail(Base):
     order_id = Column(Integer, ForeignKey("orders.id"))
     product_id = Column(Integer, ForeignKey("products.id"))
     quantity = Column(Integer, nullable=False)
-    price = Column(Decimal(10, 2), nullable=False)
+    price = Column(Numeric(10, 2), nullable=False)
