@@ -124,7 +124,40 @@
               </p>
 
               <div class="d-grid gap-2">
-                <button class="btn btn-success btn-sm" (click)="addToCart(p)">
+                <div *ngIf="!isAdmin" class="quantity-selector">
+                  <button
+                    class="btn btn-outline-secondary btn-sm"
+                    [disabled]="!hasStockAvailableForCart(p.id)"
+                    (click)="decreaseRequestedQuantity(p)"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    class="form-control form-control-sm text-center"
+                    [ngModel]="getRequestedQuantity(p.id)"
+                    (ngModelChange)="setRequestedQuantity(p, $event)"
+                    [min]="1"
+                    [max]="getAvailableStockForCart(p.id)"
+                    [disabled]="!hasStockAvailableForCart(p.id)"
+                  />
+                  <button
+                    class="btn btn-outline-secondary btn-sm"
+                    [disabled]="!hasStockAvailableForCart(p.id)"
+                    (click)="increaseRequestedQuantity(p)"
+                  >
+                    +
+                  </button>
+                </div>
+                <small *ngIf="!isAdmin" class="text-muted">
+                  Disponible para agregar: {{ getAvailableStockForCart(p.id) }}
+                </small>
+                <button
+                  *ngIf="!isAdmin"
+                  class="btn btn-success btn-sm"
+                  [disabled]="!hasStockAvailableForCart(p.id)"
+                  (click)="addToCart(p)"
+                >
                   Añadir al Carrito
                 </button>
                 <div *ngIf="isAdmin" class="btn-group w-100">
@@ -152,16 +185,28 @@
     <div class="col-md-4">
       <div class="card shadow-sm">
         <div class="card-body">
-          <h4>Carrito ({{ cart.length }})</h4>
+          <h4>Carrito ({{ cartItemsCount }})</h4>
           <ul class="list-group list-group-flush mb-3">
             <li
               class="list-group-item d-flex justify-content-between align-items-center"
               *ngFor="let item of cart"
             >
-              {{ item.name }}
-              <span>${{ item.price }}</span>
+              <div>
+                <strong>{{ item.name }}</strong>
+                <div class="small text-muted">
+                  {{ item.quantity }} x ${{ item.unitPrice }}
+                </div>
+              </div>
+              <span>${{ item.quantity * item.unitPrice }}</span>
             </li>
           </ul>
+          <div
+            *ngIf="cart.length > 0"
+            class="mb-3 d-flex justify-content-between fw-bold"
+          >
+            <span>Total</span>
+            <span>${{ cartTotal }}</span>
+          </div>
           <div *ngIf="cart.length > 0">
             <button class="btn btn-primary w-100" (click)="checkout()">
               Pagar Ahora

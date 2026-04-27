@@ -1,17 +1,30 @@
 .card {
-    transition: transform 0.2s;
+  transition: transform 0.2s;
 }
+
 .card:hover {
-    transform: translateY(-5px);
+  transform: translateY(-5px);
 }
+
 h3 {
-    margin-bottom: 1.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .navbar {
-    backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
 
 .navbar.bg-primary {
-    background: linear-gradient(90deg, #0d6efd, #0b5ed7) !important;
+  background: linear-gradient(90deg, #0d6efd, #0b5ed7) !important;
+}
+
+.quantity-selector {
+  display: grid;
+  grid-template-columns: 36px 1fr 36px;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.quantity-selector .form-control {
+  min-width: 0;
 }

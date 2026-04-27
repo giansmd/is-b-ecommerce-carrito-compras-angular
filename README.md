@@ -67,11 +67,39 @@ El sistema incluye datos precargados para facilitar las pruebas. Al iniciar el b
     - Botón "Añadir Producto" visible solo para administradores.
     - Opciones de "Editar" y "Eliminar" en cada tarjeta de producto para administradores.
     - Formulario dinámico para creación/edición.
+3.  **Carrito para Cliente con Cantidades y Validación de Stock**:
+
+- El usuario con rol `cliente` puede seleccionar cuántas unidades desea agregar por producto.
+- El frontend valida en todo momento el stock disponible considerando lo que ya está en el carrito.
+- Si el stock cambia, el carrito se sincroniza automáticamente para evitar cantidades inválidas.
+- Antes del checkout se vuelve a validar el stock para prevenir compras con disponibilidad insuficiente.
 
 ### Ejecución Local con Docker
 
 ```bash
 docker-compose up --build
+```
+
+### Perfiles Docker Compose (Dev y Prod)
+
+Se agregaron dos archivos para separar flujos de trabajo:
+
+- `docker-compose.dev.yml`: entorno de desarrollo con recarga en caliente.
+  - Backend con `uvicorn --reload`.
+  - Frontend Angular con `ng serve` (puerto `4200`).
+  - Dashboard y backend montando código local como volumen.
+- `docker-compose.prod.yml`: entorno orientado a ejecución tipo producción.
+  - Usa los Dockerfiles de cada servicio.
+  - Frontend servido con Nginx (puerto `4200 -> 80`).
+
+Comandos:
+
+```bash
+# Desarrollo
+docker compose -f docker-compose.dev.yml up --build
+
+# Producción (local)
+docker compose -f docker-compose.prod.yml up --build -d
 ```
 
 - Angular: http://localhost:4200

@@ -10,7 +10,8 @@ import { Product, ProductService } from "./services/product.service";
 })
 export class AppComponent implements OnInit {
   products: Product[] = [];
-  cart: Product[] = [];
+  cart: CartItem[] = [];
+  requestedQuantities: Record<number, number> = {};
   session: AuthSession | null = null;
   email = "";
   password = "";
@@ -28,6 +29,17 @@ export class AppComponent implements OnInit {
     stock: 0,
   };
 
+  get cartItemsCount(): number {
+    return this.cart.reduce((sum, item) => sum + item.quantity, 0);
+  }
+
+  get cartTotal(): number {
+    return this.cart.reduce(
+      (sum, item) => sum + item.unitPrice * item.quantity,
+      0,
+    );
+  }
+
   constructor(
     private auth: AuthService,
     private productsApi: ProductService,
@@ -39,7 +51,9 @@ export class AppComponent implements OnInit {
     this.checkSession();
     const today = new Date();
     const end = today.toISOString().slice(0, 10);
-    const start = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const start = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
     this.reportStartDate = start;
     this.reportEndDate = end;
   }
@@ -55,7 +69,10 @@ export class AppComponent implements OnInit {
   }
 
   loadProducts() {
-    this.productsApi.list().subscribe((res) => (this.products = res));
+    this.productsApi.list().subscribe((res) => {
+      this.products = res;
+      this.syncCartWithCurrentStock();
+    });
   }
 
   login() {
@@ -76,11 +93,18 @@ export class AppComponent implements OnInit {
     this.isLoggedIn = false;
     this.isAdmin = false;
     this.cart = [];
+    this.requestedQuantities = {};
   }
 
   openAddProduct() {
     this.editingProduct = null;
-    this.productForm = { name: "", description: "", price: 0, category: "", stock: 0 };
+    this.productForm = {
+      name: "",
+      description: "",
+      price: 0,
+      category: "",
+      stock: 0,
+    };
     this.showProductForm = true;
   }
 
@@ -98,14 +122,16 @@ export class AppComponent implements OnInit {
 
   saveProduct() {
     if (this.editingProduct) {
-      this.productsApi.update(this.editingProduct.id, this.productForm).subscribe({
-        next: () => {
-          this.loadProducts();
-          this.showProductForm = false;
-          alert("Producto actualizado");
-        },
-        error: () => alert("Error al actualizar producto"),
-      });
+      this.productsApi
+        .update(this.editingProduct.id, this.productForm)
+        .subscribe({
+          next: () => {
+            this.loadProducts();
+            this.showProductForm = false;
+            alert("Producto actualizado");
+          },
+          error: () => alert("Error al actualizar producto"),
+        });
     } else {
       this.productsApi.create(this.productForm).subscribe({
         next: () => {
@@ -135,30 +161,178 @@ export class AppComponent implements OnInit {
       alert("Debes iniciar sesión");
       return;
     }
-    this.cartApi.addToCart(product.id, 1).subscribe({
+
+    if (this.isAdmin) {
+      alert("Solo usuarios cliente pueden agregar productos al carrito");
+      return;
+    }
+
+    const desiredQuantity = this.getRequestedQuantity(product.id);
+    const availableStock = this.getAvailableStockForCart(product.id);
+
+    if (availableStock <= 0) {
+      alert("No hay stock disponible para agregar más unidades");
+      return;
+    }
+
+    if (desiredQuantity > availableStock) {
+      this.requestedQuantities[product.id] = availableStock;
+      alert(
+        `Solo hay ${availableStock} unidad(es) disponibles para este producto`,
+      );
+      return;
+    }
+
+    this.cartApi.addToCart(product.id, desiredQuantity).subscribe({
       next: () => {
-        this.cart.push(product);
+        const existing = this.cart.find(
+          (item) => item.productId === product.id,
+        );
+        if (existing) {
+          existing.quantity += desiredQuantity;
+          existing.maxStock = product.stock;
+        } else {
+          this.cart.push({
+            productId: product.id,
+            name: product.name,
+            unitPrice: Number(product.price),
+            quantity: desiredQuantity,
+            maxStock: product.stock,
+          });
+        }
+
+        const newAvailableStock = this.getAvailableStockForCart(product.id);
+        this.requestedQuantities[product.id] =
+          newAvailableStock > 0
+            ? Math.min(desiredQuantity, newAvailableStock)
+            : 1;
         alert("Producto agregado al carrito");
       },
-      error: () => alert("No se pudo agregar al carrito"),
+      error: (error) => {
+        if (error?.status === 400) {
+          alert("Stock insuficiente. Se actualizará el stock disponible.");
+          this.loadProducts();
+          return;
+        }
+        alert("No se pudo agregar al carrito");
+      },
     });
   }
 
   checkout() {
+    if (!this.validateCartAgainstStock()) {
+      return;
+    }
+
     this.cartApi.checkout().subscribe({
       next: (res) => {
         this.cart = [];
+        this.requestedQuantities = {};
+        this.loadProducts();
         alert(`Compra realizada. Pedido #${res.order_id}. Total: ${res.total}`);
       },
       error: () => alert("No se pudo procesar el checkout"),
     });
   }
 
-  generateOperationalReport() {
-    this.cartApi.generateOperationalReport(this.reportStartDate, this.reportEndDate).subscribe({
-      next: (res) => this.openPdf(res.pdf_url),
-      error: () => alert("No se pudo generar el reporte operacional"),
+  getRequestedQuantity(productId: number): number {
+    const current = this.requestedQuantities[productId];
+    if (!current || current < 1) {
+      this.requestedQuantities[productId] = 1;
+      return 1;
+    }
+    return current;
+  }
+
+  setRequestedQuantity(product: Product, rawValue: number | string): void {
+    const parsed = Number(rawValue);
+    const safeValue = Number.isFinite(parsed) ? Math.floor(parsed) : 1;
+    const max = Math.max(1, this.getAvailableStockForCart(product.id));
+    this.requestedQuantities[product.id] = Math.min(
+      Math.max(safeValue, 1),
+      max,
+    );
+  }
+
+  increaseRequestedQuantity(product: Product): void {
+    this.setRequestedQuantity(
+      product,
+      this.getRequestedQuantity(product.id) + 1,
+    );
+  }
+
+  decreaseRequestedQuantity(product: Product): void {
+    this.setRequestedQuantity(
+      product,
+      this.getRequestedQuantity(product.id) - 1,
+    );
+  }
+
+  getAvailableStockForCart(productId: number): number {
+    const product = this.products.find((p) => p.id === productId);
+    if (!product) {
+      return 0;
+    }
+    const alreadyInCart = this.getCartQuantity(productId);
+    return Math.max(product.stock - alreadyInCart, 0);
+  }
+
+  hasStockAvailableForCart(productId: number): boolean {
+    return this.getAvailableStockForCart(productId) > 0;
+  }
+
+  private getCartQuantity(productId: number): number {
+    const item = this.cart.find((cartItem) => cartItem.productId === productId);
+    return item ? item.quantity : 0;
+  }
+
+  private syncCartWithCurrentStock(): void {
+    this.cart = this.cart.filter((item) => {
+      const product = this.products.find((p) => p.id === item.productId);
+      if (!product || product.stock <= 0) {
+        return false;
+      }
+      item.maxStock = product.stock;
+      if (item.quantity > product.stock) {
+        item.quantity = product.stock;
+      }
+      return item.quantity > 0;
     });
+
+    this.products.forEach((product) => {
+      const available = this.getAvailableStockForCart(product.id);
+      const currentDesired = this.getRequestedQuantity(product.id);
+      this.requestedQuantities[product.id] =
+        available > 0 ? Math.min(currentDesired, available) : 1;
+    });
+  }
+
+  private validateCartAgainstStock(): boolean {
+    for (const item of this.cart) {
+      const product = this.products.find((p) => p.id === item.productId);
+      if (!product) {
+        alert(`El producto ${item.name} ya no está disponible.`);
+        this.syncCartWithCurrentStock();
+        return false;
+      }
+      if (item.quantity > product.stock) {
+        alert(
+          `Stock insuficiente para ${item.name}. Máximo disponible: ${product.stock}.`,
+        );
+        this.syncCartWithCurrentStock();
+        return false;
+      }
+    }
+    return true;
+  }
+
+  generateOperationalReport() {
+    this.cartApi
+      .generateOperationalReport(this.reportStartDate, this.reportEndDate)
+      .subscribe({
+        next: (res) => this.openPdf(res.pdf_url),
+        error: () => alert("No se pudo generar el reporte operacional"),
+      });
   }
 
   generateManagementReport() {
@@ -172,4 +346,12 @@ export class AppComponent implements OnInit {
     const absolute = `${this.auth.backendUrl}${pdfUrl}`;
     window.open(absolute, "_blank");
   }
+}
+
+interface CartItem {
+  productId: number;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+  maxStock: number;
 }

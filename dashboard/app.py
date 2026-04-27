@@ -116,9 +116,29 @@ with col_left:
         st.error(f"Error al cargar top productos: {top_error}")
     elif top_res.status_code == 200:
         top_data = top_res.json()
-        df_top = pd.DataFrame(top_data)
-        fig = px.bar(df_top, x="producto", y="ventas", color="producto", title="Unidades vendidas por producto")
-        st.plotly_chart(fig, use_container_width=True)
+        if isinstance(top_data, list):
+            df_top = pd.DataFrame(top_data)
+        elif isinstance(top_data, dict):
+            df_top = pd.DataFrame([top_data])
+        else:
+            df_top = pd.DataFrame()
+
+        required_cols = {"producto", "ventas"}
+        if df_top.empty:
+            st.info("Aún no hay datos de productos vendidos.")
+        elif not required_cols.issubset(df_top.columns):
+            st.warning("El formato de datos de top productos no es válido.")
+        else:
+            fig = px.bar(
+                df_top,
+                x="producto",
+                y="ventas",
+                color="producto",
+                title="Unidades vendidas por producto",
+            )
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.error("No se pudo cargar el top de productos.")
 
 with col_right:
     st.subheader("Distribución de Categorías")
