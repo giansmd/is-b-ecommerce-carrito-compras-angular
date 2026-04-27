@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: shopping_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/shopping_db
+      SECRET_KEY: your-secret-key-here
+
+  # Placeholder for frontend and dashboard
+  # These will be implemented later
+  # angular:
+  #   build: ./frontend-angular
+  #   ports:
+  #     - "4200:80"
+  #   depends_on:
+  #     - backend
+
+  # streamlit:
+  #   build: ./dashboard
+  #   ports:
+  #     - "8501:8501"
+  #   depends_on:
+  #     - backend
+
+volumes:
+  postgres_data:
