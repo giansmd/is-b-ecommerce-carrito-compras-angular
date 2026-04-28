@@ -5,10 +5,14 @@ import { FormsModule } from '@angular/forms';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
+import { OrdersAdminComponent } from './orders-admin/orders-admin.component';
+import { StoreComponent } from './store/store.component';
 
 @NgModule({
   declarations: [
-    AppComponent
+    AppComponent,
+    StoreComponent,
+    OrdersAdminComponent,
   ],
   imports: [
     BrowserModule,

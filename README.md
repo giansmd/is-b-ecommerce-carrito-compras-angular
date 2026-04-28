@@ -80,6 +80,81 @@ El sistema incluye datos precargados para facilitar las pruebas. Al iniciar el b
 - Si el stock cambia, el carrito se sincroniza automáticamente para evitar cantidades inválidas.
 - Antes del checkout se vuelve a validar el stock para prevenir compras con disponibilidad insuficiente.
 
+4. **Gestión de Pedidos (Admin):**
+
+- Se agregó una nueva página Angular para administradores: `/admin/pedidos`.
+- Desde la pantalla principal, un admin puede entrar con el botón **"Ver pedidos"**.
+- La página muestra:
+  - listado de pedidos (id, cliente, fecha, estado, total, cantidad de items),
+  - detalle por pedido (productos, cantidad, precio unitario, subtotal y total final).
+- Si un usuario no autenticado o no admin intenta entrar, se redirige a la tienda principal.
+
+### Endpoints nuevos (Pedidos Admin)
+
+Estos endpoints requieren JWT válido de un usuario con rol `admin` en el header `Authorization: Bearer <token>`.
+
+#### `GET /api/orders/admin`
+
+Lista todos los pedidos ordenados por fecha descendente.
+
+Ejemplo de respuesta:
+
+```json
+[
+  {
+    "id": 12,
+    "user_id": 3,
+    "customer_email": "cliente1@example.com",
+    "total_amount": 540.5,
+    "status": "completado",
+    "order_date": "2026-04-27T14:33:10.123456",
+    "items_count": 2
+  }
+]
+```
+
+#### `GET /api/orders/admin/{order_id}`
+
+Devuelve el detalle completo de un pedido.
+
+Ejemplo de respuesta:
+
+```json
+{
+  "id": 12,
+  "user_id": 3,
+  "customer_email": "cliente1@example.com",
+  "total_amount": 540.5,
+  "status": "completado",
+  "order_date": "2026-04-27T14:33:10.123456",
+  "items": [
+    {
+      "id": 44,
+      "product_id": 1,
+      "product_name": "Laptop Gamer",
+      "quantity": 1,
+      "price": 500,
+      "subtotal": 500
+    }
+  ]
+}
+```
+
+### Frontend: nueva página de pedidos
+
+Archivos agregados:
+
+- `frontend-angular/src/app/orders-admin/orders-admin.component.ts`
+- `frontend-angular/src/app/orders-admin/orders-admin.component.html`
+- `frontend-angular/src/app/orders-admin/orders-admin.component.css`
+- `frontend-angular/src/app/services/order.service.ts`
+
+Cambios de navegación:
+
+- Nueva ruta Angular: `admin/pedidos`
+- La pantalla principal de tienda se movió a `StoreComponent` (`/`)
+- `AppComponent` ahora actúa como shell con `router-outlet`
+
 ### Ejecución Local con Docker
 
 ```bash

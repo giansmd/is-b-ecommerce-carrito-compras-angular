@@ -58,6 +58,32 @@ class OrderResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class OrderAdminListItem(BaseModel):
+    id: int
+    user_id: int
+    customer_email: str
+    total_amount: Decimal
+    status: str
+    order_date: datetime
+    items_count: int
+
+class OrderAdminDetailItem(BaseModel):
+    id: int
+    product_id: int
+    product_name: str
+    quantity: int
+    price: Decimal
+    subtotal: Decimal
+
+class OrderAdminDetail(BaseModel):
+    id: int
+    user_id: int
+    customer_email: str
+    total_amount: Decimal
+    status: str
+    order_date: datetime
+    items: List[OrderAdminDetailItem]
+
 class ReportRequest(BaseModel):
     start_date: str
     end_date: str

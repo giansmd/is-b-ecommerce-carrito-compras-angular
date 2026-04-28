@@ -1,0 +1,99 @@
+<section class="orders-admin-page">
+  <div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <p class="kicker mb-1">Administracion</p>
+        <h2 class="mb-0">Pedidos realizados</h2>
+      </div>
+      <button class="btn btn-outline-primary" (click)="backToStore()">Volver a tienda</button>
+    </div>
+
+    <div class="row g-4">
+      <div class="col-lg-7">
+        <div class="card border-0 shadow-sm panel-card">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="mb-0">Listado de pedidos</h5>
+              <button class="btn btn-sm btn-outline-secondary" (click)="loadOrders()">Actualizar</button>
+            </div>
+
+            <div *ngIf="isLoadingOrders" class="text-muted">Cargando pedidos...</div>
+            <div *ngIf="!isLoadingOrders && orders.length === 0" class="empty-state">
+              No hay pedidos registrados por el momento.
+            </div>
+
+            <div class="list-group order-list" *ngIf="!isLoadingOrders && orders.length > 0">
+              <button
+                class="list-group-item list-group-item-action order-item"
+                *ngFor="let order of orders"
+                [class.active]="selectedOrderId === order.id"
+                (click)="openDetail(order.id)"
+              >
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="fw-semibold">Pedido #{{ order.id }}</div>
+                    <div class="small text-muted">{{ order.customer_email }}</div>
+                    <div class="small text-muted">{{ getOrderDate(order) }}</div>
+                  </div>
+                  <span class="badge rounded-pill bg-light text-dark">{{ order.items_count }} items</span>
+                </div>
+                <div class="d-flex justify-content-between mt-2">
+                  <span class="small text-uppercase text-muted">{{ order.status }}</span>
+                  <span class="fw-semibold">${{ getOrderTotal(order).toFixed(2) }}</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-5">
+        <div class="card border-0 shadow-sm panel-card detail-card">
+          <div class="card-body">
+            <h5 class="mb-3">Detalle del pedido</h5>
+
+            <div *ngIf="isLoadingDetail" class="text-muted">Cargando detalle...</div>
+            <div *ngIf="!isLoadingDetail && !selectedOrder" class="empty-state">
+              Selecciona un pedido para ver su detalle.
+            </div>
+
+            <div *ngIf="!isLoadingDetail && selectedOrder">
+              <div class="meta mb-3">
+                <div><strong>Pedido:</strong> #{{ selectedOrder.id }}</div>
+                <div><strong>Cliente:</strong> {{ selectedOrder.customer_email }}</div>
+                <div><strong>Estado:</strong> {{ selectedOrder.status }}</div>
+                <div><strong>Fecha:</strong> {{ selectedOrder.order_date | date: "medium" }}</div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th class="text-center">Cant.</th>
+                      <th class="text-end">Precio</th>
+                      <th class="text-end">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let item of selectedOrder.items">
+                      <td>{{ item.product_name }}</td>
+                      <td class="text-center">{{ item.quantity }}</td>
+                      <td class="text-end">${{ (+item.price).toFixed(2) }}</td>
+                      <td class="text-end">${{ getItemSubtotal(item).toFixed(2) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="detail-total d-flex justify-content-between">
+                <span>Total del pedido</span>
+                <strong>${{ getDetailTotal().toFixed(2) }}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

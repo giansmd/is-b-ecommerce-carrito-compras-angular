@@ -328,6 +328,105 @@ async def checkout(data: dict, db: AsyncSession = Depends(get_db)):
     await db.commit()
     return {"order_id": order.id, "total": total, "message": "Compra realizada"}
 
+@app.get("/api/orders/admin", response_model=list[schemas.OrderAdminListItem])
+async def list_orders_admin(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(require_admin),
+):
+    items_count_subquery = (
+        select(
+            models.OrderDetail.order_id.label("order_id"),
+            func.count(models.OrderDetail.id).label("items_count"),
+        )
+        .group_by(models.OrderDetail.order_id)
+        .subquery()
+    )
+
+    stmt = (
+        select(
+            models.Order.id,
+            models.Order.user_id,
+            models.User.email,
+            models.Order.total_amount,
+            models.Order.status,
+            models.Order.order_date,
+            func.coalesce(items_count_subquery.c.items_count, 0),
+        )
+        .join(models.User, models.User.id == models.Order.user_id)
+        .outerjoin(items_count_subquery, items_count_subquery.c.order_id == models.Order.id)
+        .order_by(models.Order.order_date.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+    return [
+        {
+            "id": order_id,
+            "user_id": user_id,
+            "customer_email": email,
+            "total_amount": total_amount,
+            "status": status,
+            "order_date": order_date,
+            "items_count": int(items_count or 0),
+        }
+        for order_id, user_id, email, total_amount, status, order_date, items_count in rows
+    ]
+
+@app.get("/api/orders/admin/{order_id}", response_model=schemas.OrderAdminDetail)
+async def get_order_admin_detail(
+    order_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(require_admin),
+):
+    order_stmt = (
+        select(
+            models.Order.id,
+            models.Order.user_id,
+            models.User.email,
+            models.Order.total_amount,
+            models.Order.status,
+            models.Order.order_date,
+        )
+        .join(models.User, models.User.id == models.Order.user_id)
+        .where(models.Order.id == order_id)
+    )
+    order_row = (await db.execute(order_stmt)).one_or_none()
+    if not order_row:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    details_stmt = (
+        select(
+            models.OrderDetail.id,
+            models.OrderDetail.product_id,
+            models.Product.name,
+            models.OrderDetail.quantity,
+            models.OrderDetail.price,
+        )
+        .join(models.Product, models.Product.id == models.OrderDetail.product_id)
+        .where(models.OrderDetail.order_id == order_id)
+        .order_by(models.OrderDetail.id.asc())
+    )
+    detail_rows = (await db.execute(details_stmt)).all()
+    items = [
+        {
+            "id": detail_id,
+            "product_id": product_id,
+            "product_name": product_name,
+            "quantity": quantity,
+            "price": price,
+            "subtotal": quantity * price,
+        }
+        for detail_id, product_id, product_name, quantity, price in detail_rows
+    ]
+
+    return {
+        "id": order_row[0],
+        "user_id": order_row[1],
+        "customer_email": order_row[2],
+        "total_amount": order_row[3],
+        "status": order_row[4],
+        "order_date": order_row[5],
+        "items": items,
+    }
+
 # Reports
 @app.post("/api/reports/operational")
 async def generate_operational_report(report_req: schemas.ReportRequest, db: AsyncSession = Depends(get_db)):
