@@ -84,6 +84,93 @@ def parse_date_range(start_date: str, end_date: str) -> tuple[datetime, datetime
     return start_dt, end_dt
 
 
+PAGE_WIDTH, PAGE_HEIGHT = letter
+PDF_MARGIN_X = 56
+PDF_MARGIN_BOTTOM = 56
+
+
+def _fmt_money(value: float) -> str:
+    return f"S/ {value:,.2f}"
+
+
+def _draw_report_header(c: canvas.Canvas, title: str, subtitle: str, generated_at: str, page_number: int) -> float:
+    c.setFillColorRGB(0.09, 0.18, 0.36)
+    c.rect(0, PAGE_HEIGHT - 90, PAGE_WIDTH, 90, fill=1, stroke=0)
+    c.setFillColorRGB(1, 1, 1)
+    c.setFont("Helvetica-Bold", 17)
+    c.drawString(PDF_MARGIN_X, PAGE_HEIGHT - 42, title)
+    c.setFont("Helvetica", 9)
+    c.drawString(PDF_MARGIN_X, PAGE_HEIGHT - 60, subtitle)
+    c.drawRightString(PAGE_WIDTH - PDF_MARGIN_X, PAGE_HEIGHT - 60, generated_at)
+
+    c.setStrokeColorRGB(0.77, 0.82, 0.92)
+    c.setLineWidth(1)
+    c.line(PDF_MARGIN_X, PAGE_HEIGHT - 94, PAGE_WIDTH - PDF_MARGIN_X, PAGE_HEIGHT - 94)
+    c.setFont("Helvetica", 8)
+    c.setFillColorRGB(0.42, 0.47, 0.56)
+    c.drawRightString(PAGE_WIDTH - PDF_MARGIN_X, PAGE_HEIGHT - 106, f"Pagina {page_number}")
+    c.setFillColorRGB(0, 0, 0)
+    return PAGE_HEIGHT - 128
+
+
+def _draw_report_footer(c: canvas.Canvas, label: str, page_number: int) -> None:
+    c.setStrokeColorRGB(0.82, 0.84, 0.88)
+    c.line(PDF_MARGIN_X, PDF_MARGIN_BOTTOM - 8, PAGE_WIDTH - PDF_MARGIN_X, PDF_MARGIN_BOTTOM - 8)
+    c.setFont("Helvetica", 8)
+    c.setFillColorRGB(0.42, 0.47, 0.56)
+    c.drawString(PDF_MARGIN_X, PDF_MARGIN_BOTTOM - 22, label)
+    c.drawRightString(PAGE_WIDTH - PDF_MARGIN_X, PDF_MARGIN_BOTTOM - 22, f"Pagina {page_number}")
+    c.setFillColorRGB(0, 0, 0)
+
+
+def _draw_section_title(c: canvas.Canvas, y: float, title: str) -> float:
+    c.setFillColorRGB(0.15, 0.20, 0.31)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(PDF_MARGIN_X, y, title)
+    c.setStrokeColorRGB(0.84, 0.87, 0.92)
+    c.line(PDF_MARGIN_X, y - 4, PAGE_WIDTH - PDF_MARGIN_X, y - 4)
+    c.setFillColorRGB(0, 0, 0)
+    return y - 18
+
+
+def _draw_kpi_card(c: canvas.Canvas, x: float, y: float, width: float, height: float, label: str, value: str, tone: str) -> None:
+    tones = {
+        "blue": ((0.91, 0.95, 1.0), (0.12, 0.31, 0.62)),
+        "green": ((0.90, 0.98, 0.94), (0.08, 0.44, 0.25)),
+        "orange": ((1.0, 0.95, 0.89), (0.67, 0.36, 0.02)),
+        "purple": ((0.95, 0.92, 1.0), (0.34, 0.20, 0.57)),
+    }
+    fill_color, text_color = tones.get(tone, tones["blue"])
+    c.setFillColorRGB(*fill_color)
+    c.setStrokeColorRGB(0.80, 0.84, 0.90)
+    c.roundRect(x, y - height, width, height, 8, fill=1, stroke=1)
+    c.setFillColorRGB(*text_color)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(x + 10, y - 16, label)
+    c.setFont("Helvetica-Bold", 13)
+    c.drawString(x + 10, y - 36, value)
+    c.setFillColorRGB(0, 0, 0)
+
+
+def _draw_table_header(c: canvas.Canvas, y: float, columns: list[tuple[str, float]]) -> float:
+    c.setFillColorRGB(0.92, 0.94, 0.98)
+    c.rect(PDF_MARGIN_X, y - 14, PAGE_WIDTH - (2 * PDF_MARGIN_X), 16, fill=1, stroke=0)
+    c.setFillColorRGB(0.18, 0.23, 0.33)
+    c.setFont("Helvetica-Bold", 9)
+    cursor_x = PDF_MARGIN_X + 6
+    for label, width in columns:
+        c.drawString(cursor_x, y - 4, label)
+        cursor_x += width
+    c.setFillColorRGB(0, 0, 0)
+    return y - 20
+
+
+def _low_stock_level(stock: int) -> str:
+    if stock <= 5:
+        return "CRITICO"
+    return "ALERTA"
+
+
 DEFAULT_PRODUCTS = [
     {
         "name": "Laptop Gamer",
@@ -440,35 +527,161 @@ async def generate_operational_report(report_req: schemas.ReportRequest, db: Asy
     orders_result = await db.execute(orders_stmt)
     orders = orders_result.all()
 
+    period_totals_stmt = select(
+        func.count(models.Order.id),
+        func.coalesce(func.sum(models.Order.total_amount), 0),
+        func.coalesce(func.avg(models.Order.total_amount), 0),
+    ).where(models.Order.order_date >= start_dt, models.Order.order_date < end_dt)
+    period_totals = (await db.execute(period_totals_stmt)).one()
+    orders_count = int(period_totals[0] or 0)
+    period_revenue = float(period_totals[1] or 0)
+    period_avg_ticket = float(period_totals[2] or 0)
+
+    today = datetime.utcnow().date()
+    today_start_dt = datetime.combine(today, time.min)
+    today_end_dt = today_start_dt + timedelta(days=1)
+    today_stmt = select(
+        func.count(models.Order.id),
+        func.coalesce(func.sum(models.Order.total_amount), 0),
+    ).where(models.Order.order_date >= today_start_dt, models.Order.order_date < today_end_dt)
+    today_row = (await db.execute(today_stmt)).one()
+    revenue_today = float(today_row[1] or 0)
+
+    low_stock_stmt = (
+        select(models.Product.name, models.Product.category, models.Product.stock)
+        .where(models.Product.stock < 20)
+        .order_by(models.Product.stock.asc(), models.Product.name.asc())
+    )
+    low_stock_rows = (await db.execute(low_stock_stmt)).all()
+
     pdf_filename = f"operational_{uuid.uuid4()}.pdf"
     pdf_path = os.path.join(REPORTS_DIR, pdf_filename)
     c = canvas.Canvas(pdf_path, pagesize=letter)
-    y = 760
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(72, y, "Reporte Operacional")
-    y -= 20
-    c.setFont("Helvetica", 10)
-    c.drawString(72, y, f"Periodo: {report_req.start_date} a {report_req.end_date}")
-    y -= 16
-    c.drawString(72, y, f"Generado: {datetime.utcnow().isoformat(timespec='seconds')}Z")
-    y -= 24
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(72, y, "Pedidos")
-    y -= 18
+    generated_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    page_number = 1
+    y = _draw_report_header(
+        c,
+        "Reporte Operacional",
+        f"Periodo analizado: {report_req.start_date} a {report_req.end_date}",
+        generated_at,
+        page_number,
+    )
 
+    def next_page(current_page: int) -> tuple[int, float]:
+        _draw_report_footer(c, "Sistema Ecommerce - Reporte operacional", current_page)
+        c.showPage()
+        new_page = current_page + 1
+        new_y = _draw_report_header(
+            c,
+            "Reporte Operacional",
+            f"Periodo analizado: {report_req.start_date} a {report_req.end_date}",
+            generated_at,
+            new_page,
+        )
+        return new_page, new_y
+
+    def ensure_space(current_y: float, needed: float, current_page: int) -> tuple[float, int]:
+        if current_y - needed < PDF_MARGIN_BOTTOM + 20:
+            current_page, current_y = next_page(current_page)
+        return current_y, current_page
+
+    y = _draw_section_title(c, y, "Resumen Ejecutivo")
+    card_gap = 10
+    card_width = (PAGE_WIDTH - (2 * PDF_MARGIN_X) - (card_gap * 1)) / 2
+    card_height = 46
+    _draw_kpi_card(c, PDF_MARGIN_X, y, card_width, card_height, "Pedidos del periodo", str(orders_count), "blue")
+    _draw_kpi_card(
+        c,
+        PDF_MARGIN_X + card_width + card_gap,
+        y,
+        card_width,
+        card_height,
+        "Ingresos del periodo",
+        _fmt_money(period_revenue),
+        "green",
+    )
+    y -= card_height + 10
+    _draw_kpi_card(c, PDF_MARGIN_X, y, card_width, card_height, "Ticket promedio", _fmt_money(period_avg_ticket), "purple")
+    _draw_kpi_card(
+        c,
+        PDF_MARGIN_X + card_width + card_gap,
+        y,
+        card_width,
+        card_height,
+        "Ingresos de hoy",
+        _fmt_money(revenue_today),
+        "orange",
+    )
+    y -= card_height + 20
+
+    y, page_number = ensure_space(y, 120, page_number)
+    y = _draw_section_title(c, y, "Detalle de Pedidos")
+    columns = [("Pedido", 52), ("Fecha", 120), ("Cliente", 210), ("Total", 90)]
+    y = _draw_table_header(c, y, columns)
     c.setFont("Helvetica", 9)
+
     if not orders:
-        c.drawString(72, y, "No hay pedidos en el rango seleccionado.")
+        c.drawString(PDF_MARGIN_X + 6, y - 2, "No hay pedidos en el rango seleccionado.")
+        y -= 16
+    else:
+        row_index = 0
+        for order_id, email, total_amount, order_date in orders:
+            y, page_number = ensure_space(y, 20, page_number)
+            if row_index % 2 == 0:
+                c.setFillColorRGB(0.98, 0.99, 1.0)
+                c.rect(PDF_MARGIN_X, y - 11, PAGE_WIDTH - (2 * PDF_MARGIN_X), 13, fill=1, stroke=0)
+                c.setFillColorRGB(0, 0, 0)
+            c.drawString(PDF_MARGIN_X + 6, y - 1, f"#{order_id}")
+            c.drawString(PDF_MARGIN_X + 58, y - 1, order_date.strftime("%Y-%m-%d %H:%M"))
+            safe_email = email if len(email) <= 34 else f"{email[:31]}..."
+            c.drawString(PDF_MARGIN_X + 178, y - 1, safe_email)
+            c.drawRightString(PAGE_WIDTH - PDF_MARGIN_X - 8, y - 1, _fmt_money(float(total_amount)))
+            y -= 14
+            row_index += 1
+
+    y -= 10
+    y, page_number = ensure_space(y, 120, page_number)
+    y = _draw_section_title(c, y, "Productos de Bajo Stock (stock < 20)")
+    low_columns = [("Producto", 250), ("Categoria", 120), ("Stock", 60), ("Nivel", 70)]
+    y = _draw_table_header(c, y, low_columns)
+    c.setFont("Helvetica", 9)
+
+    if not low_stock_rows:
+        c.drawString(PDF_MARGIN_X + 6, y - 1, "No hay productos en nivel de alerta.")
         y -= 14
     else:
-        for order_id, email, total_amount, order_date in orders:
-            line = f"#{order_id} | {order_date.isoformat(sep=' ', timespec='seconds')} | {email} | Total: {float(total_amount):.2f}"
-            c.drawString(72, y, line)
-            y -= 12
-            if y < 72:
-                c.showPage()
-                y = 760
-                c.setFont("Helvetica", 9)
+        row_index = 0
+        for product_name, category, stock in low_stock_rows:
+            y, page_number = ensure_space(y, 20, page_number)
+            if row_index % 2 == 0:
+                c.setFillColorRGB(1.0, 0.98, 0.95)
+                c.rect(PDF_MARGIN_X, y - 11, PAGE_WIDTH - (2 * PDF_MARGIN_X), 13, fill=1, stroke=0)
+                c.setFillColorRGB(0, 0, 0)
+            level = _low_stock_level(int(stock or 0))
+            c.drawString(PDF_MARGIN_X + 6, y - 1, product_name[:40])
+            c.drawString(PDF_MARGIN_X + 256, y - 1, (category or "Sin categoria")[:18])
+            c.drawString(PDF_MARGIN_X + 378, y - 1, str(int(stock or 0)))
+            if level == "CRITICO":
+                c.setFillColorRGB(0.72, 0.16, 0.16)
+            else:
+                c.setFillColorRGB(0.75, 0.42, 0.08)
+            c.drawString(PDF_MARGIN_X + 438, y - 1, level)
+            c.setFillColorRGB(0, 0, 0)
+            y -= 14
+            row_index += 1
+
+    y -= 8
+    y, page_number = ensure_space(y, 62, page_number)
+    y = _draw_section_title(c, y, "Recomendaciones")
+    c.setFont("Helvetica", 9)
+    c.drawString(PDF_MARGIN_X + 4, y, "- Priorizar reposicion de productos en estado CRITICO (stock <= 5).")
+    y -= 14
+    c.drawString(PDF_MARGIN_X + 4, y, "- Programar compra semanal para productos en estado ALERTA (stock 6-19).")
+    y -= 14
+    c.drawString(PDF_MARGIN_X + 4, y, "- Revisar campañas sobre productos top para sostener margen e ingresos.")
+    y -= 16
+
+    _draw_report_footer(c, "Sistema Ecommerce - Reporte operacional", page_number)
     c.save()
     return {"pdf_url": f"/reports/{pdf_filename}"}
 
@@ -483,6 +696,21 @@ async def generate_management_report(db: AsyncSession = Depends(get_db)):
     total_orders = int(totals_row[0] or 0)
     total_revenue = float(totals_row[1] or 0)
     avg_ticket = float(totals_row[2] or 0)
+
+    today = datetime.utcnow().date()
+    today_start_dt = datetime.combine(today, time.min)
+    today_end_dt = today_start_dt + timedelta(days=1)
+    today_stmt = select(
+        func.count(models.Order.id),
+        func.coalesce(func.sum(models.Order.total_amount), 0),
+    ).where(models.Order.order_date >= today_start_dt, models.Order.order_date < today_end_dt)
+    today_row = (await db.execute(today_stmt)).one()
+    orders_today = int(today_row[0] or 0)
+    revenue_today = float(today_row[1] or 0)
+
+    distinct_users_stmt = select(func.count(func.distinct(models.Order.user_id)))
+    users_with_orders = int((await db.execute(distinct_users_stmt)).scalar_one() or 0)
+    frequency = (total_orders / users_with_orders) if users_with_orders else 0
 
     top_products_stmt = (
         select(models.Product.name, func.coalesce(func.sum(models.OrderDetail.quantity), 0).label("ventas"))
@@ -505,60 +733,170 @@ async def generate_management_report(db: AsyncSession = Depends(get_db)):
     )
     top_categories = (await db.execute(category_sales_stmt)).all()
 
+    low_stock_stmt = (
+        select(models.Product.name, models.Product.category, models.Product.stock)
+        .where(models.Product.stock < 20)
+        .order_by(models.Product.stock.asc(), models.Product.name.asc())
+    )
+    low_stock_rows = (await db.execute(low_stock_stmt)).all()
+
     pdf_filename = f"management_{uuid.uuid4()}.pdf"
     pdf_path = os.path.join(REPORTS_DIR, pdf_filename)
     c = canvas.Canvas(pdf_path, pagesize=letter)
-    y = 760
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(72, y, "Reporte Gerencial")
-    y -= 20
-    c.setFont("Helvetica", 10)
-    c.drawString(72, y, f"Generado: {datetime.utcnow().isoformat(timespec='seconds')}Z")
-    y -= 24
+    generated_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    page_number = 1
+    y = _draw_report_header(
+        c,
+        "Reporte Gerencial",
+        "Vista ejecutiva de rendimiento comercial y operativo",
+        generated_at,
+        page_number,
+    )
 
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(72, y, "Resumen")
-    y -= 18
-    c.setFont("Helvetica", 10)
-    c.drawString(72, y, f"Pedidos totales: {total_orders}")
-    y -= 14
-    c.drawString(72, y, f"Ingresos totales: {total_revenue:.2f}")
-    y -= 14
-    c.drawString(72, y, f"Ticket promedio: {avg_ticket:.2f}")
-    y -= 22
+    def next_page(current_page: int) -> tuple[int, float]:
+        _draw_report_footer(c, "Sistema Ecommerce - Reporte gerencial", current_page)
+        c.showPage()
+        new_page = current_page + 1
+        new_y = _draw_report_header(
+            c,
+            "Reporte Gerencial",
+            "Vista ejecutiva de rendimiento comercial y operativo",
+            generated_at,
+            new_page,
+        )
+        return new_page, new_y
 
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(72, y, "Top Productos (por unidades)")
-    y -= 18
-    c.setFont("Helvetica", 10)
+    def ensure_space(current_y: float, needed: float, current_page: int) -> tuple[float, int]:
+        if current_y - needed < PDF_MARGIN_BOTTOM + 20:
+            current_page, current_y = next_page(current_page)
+        return current_y, current_page
+
+    y = _draw_section_title(c, y, "Indicadores Clave")
+    card_gap = 8
+    card_width = (PAGE_WIDTH - (2 * PDF_MARGIN_X) - (card_gap * 3)) / 4
+    card_height = 46
+    _draw_kpi_card(c, PDF_MARGIN_X, y, card_width, card_height, "Ventas hoy", str(orders_today), "blue")
+    _draw_kpi_card(
+        c, PDF_MARGIN_X + (card_width + card_gap), y, card_width, card_height, "Ingresos hoy", _fmt_money(revenue_today), "green"
+    )
+    _draw_kpi_card(
+        c,
+        PDF_MARGIN_X + (2 * (card_width + card_gap)),
+        y,
+        card_width,
+        card_height,
+        "Ingresos totales",
+        _fmt_money(total_revenue),
+        "orange",
+    )
+    _draw_kpi_card(
+        c,
+        PDF_MARGIN_X + (3 * (card_width + card_gap)),
+        y,
+        card_width,
+        card_height,
+        "Frecuencia",
+        f"{frequency:.2f}",
+        "purple",
+    )
+    y -= card_height + 22
+
+    y, page_number = ensure_space(y, 140, page_number)
+    y = _draw_section_title(c, y, "Top Productos (unidades)")
+    y = _draw_table_header(c, y, [("Rank", 44), ("Producto", 322), ("Ventas", 90)])
+    c.setFont("Helvetica", 9)
     if not top_products:
-        c.drawString(72, y, "Sin ventas registradas.")
+        c.drawString(PDF_MARGIN_X + 6, y - 1, "Sin ventas registradas.")
         y -= 14
     else:
-        for name, ventas in top_products:
-            c.drawString(72, y, f"- {name}: {int(ventas or 0)}")
+        row_index = 0
+        for idx, (name, ventas) in enumerate(top_products, start=1):
+            y, page_number = ensure_space(y, 20, page_number)
+            if row_index % 2 == 0:
+                c.setFillColorRGB(0.98, 0.99, 1.0)
+                c.rect(PDF_MARGIN_X, y - 11, PAGE_WIDTH - (2 * PDF_MARGIN_X), 13, fill=1, stroke=0)
+                c.setFillColorRGB(0, 0, 0)
+            medal = "1" if idx == 1 else "2" if idx == 2 else "3" if idx == 3 else str(idx)
+            c.drawString(PDF_MARGIN_X + 8, y - 1, medal)
+            c.drawString(PDF_MARGIN_X + 52, y - 1, name[:52])
+            c.drawRightString(PAGE_WIDTH - PDF_MARGIN_X - 8, y - 1, str(int(ventas or 0)))
             y -= 14
-            if y < 72:
-                c.showPage()
-                y = 760
-                c.setFont("Helvetica", 10)
+            row_index += 1
+
+    y -= 10
+    y, page_number = ensure_space(y, 140, page_number)
+    y = _draw_section_title(c, y, "Top Categorias (ingresos)")
+    y = _draw_table_header(c, y, [("Categoria", 290), ("Ingresos", 110)])
+    c.setFont("Helvetica", 9)
+    if not top_categories:
+        c.drawString(PDF_MARGIN_X + 6, y - 1, "Sin ventas registradas.")
+        y -= 14
+    else:
+        subtotal_categories = 0.0
+        row_index = 0
+        for categoria, ingresos in top_categories:
+            y, page_number = ensure_space(y, 20, page_number)
+            if row_index % 2 == 0:
+                c.setFillColorRGB(0.98, 0.99, 1.0)
+                c.rect(PDF_MARGIN_X, y - 11, PAGE_WIDTH - (2 * PDF_MARGIN_X), 13, fill=1, stroke=0)
+                c.setFillColorRGB(0, 0, 0)
+            amount = float(ingresos or 0)
+            subtotal_categories += amount
+            c.drawString(PDF_MARGIN_X + 8, y - 1, (categoria or "Sin categoria")[:45])
+            c.drawRightString(PAGE_WIDTH - PDF_MARGIN_X - 8, y - 1, _fmt_money(amount))
+            y -= 14
+            row_index += 1
+        y, page_number = ensure_space(y, 20, page_number)
+        c.setFillColorRGB(0.92, 0.95, 0.99)
+        c.rect(PDF_MARGIN_X, y - 11, PAGE_WIDTH - (2 * PDF_MARGIN_X), 13, fill=1, stroke=0)
+        c.setFillColorRGB(0.18, 0.23, 0.33)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(PDF_MARGIN_X + 8, y - 1, "Subtotal categorias")
+        c.drawRightString(PAGE_WIDTH - PDF_MARGIN_X - 8, y - 1, _fmt_money(subtotal_categories))
+        c.setFillColorRGB(0, 0, 0)
+        c.setFont("Helvetica", 9)
+        y -= 16
+
+    y -= 6
+    y, page_number = ensure_space(y, 110, page_number)
+    y = _draw_section_title(c, y, "Productos de Bajo Stock (stock < 20)")
+    y = _draw_table_header(c, y, [("Producto", 252), ("Categoria", 122), ("Stock", 56), ("Nivel", 72)])
+    c.setFont("Helvetica", 9)
+    if not low_stock_rows:
+        c.drawString(PDF_MARGIN_X + 6, y - 1, "No hay productos en alerta de inventario.")
+        y -= 14
+    else:
+        row_index = 0
+        for product_name, category, stock in low_stock_rows:
+            y, page_number = ensure_space(y, 20, page_number)
+            if row_index % 2 == 0:
+                c.setFillColorRGB(1.0, 0.98, 0.95)
+                c.rect(PDF_MARGIN_X, y - 11, PAGE_WIDTH - (2 * PDF_MARGIN_X), 13, fill=1, stroke=0)
+                c.setFillColorRGB(0, 0, 0)
+            level = _low_stock_level(int(stock or 0))
+            c.drawString(PDF_MARGIN_X + 6, y - 1, product_name[:40])
+            c.drawString(PDF_MARGIN_X + 260, y - 1, (category or "Sin categoria")[:18])
+            c.drawString(PDF_MARGIN_X + 386, y - 1, str(int(stock or 0)))
+            if level == "CRITICO":
+                c.setFillColorRGB(0.72, 0.16, 0.16)
+            else:
+                c.setFillColorRGB(0.75, 0.42, 0.08)
+            c.drawString(PDF_MARGIN_X + 442, y - 1, level)
+            c.setFillColorRGB(0, 0, 0)
+            y -= 14
+            row_index += 1
 
     y -= 8
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(72, y, "Top Categorías (por ingresos)")
-    y -= 18
-    c.setFont("Helvetica", 10)
-    if not top_categories:
-        c.drawString(72, y, "Sin ventas registradas.")
-        y -= 14
-    else:
-        for categoria, ingresos in top_categories:
-            c.drawString(72, y, f"- {categoria}: {float(ingresos or 0):.2f}")
-            y -= 14
-            if y < 72:
-                c.showPage()
-                y = 760
-                c.setFont("Helvetica", 10)
+    y, page_number = ensure_space(y, 62, page_number)
+    y = _draw_section_title(c, y, "Recomendaciones")
+    c.setFont("Helvetica", 9)
+    c.drawString(PDF_MARGIN_X + 4, y, "- Acelerar compra para items CRITICO y revisar stock de seguridad por categoria.")
+    y -= 14
+    c.drawString(PDF_MARGIN_X + 4, y, "- Sostener la inversion en top productos para mantener ingresos y rotacion.")
+    y -= 14
+    c.drawString(PDF_MARGIN_X + 4, y, "- Monitorear ticket promedio para detectar oportunidades de cross-selling.")
+
+    _draw_report_footer(c, "Sistema Ecommerce - Reporte gerencial", page_number)
     c.save()
     return {"pdf_url": f"/reports/{pdf_filename}"}
 
