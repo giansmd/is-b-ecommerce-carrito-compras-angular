@@ -1,5 +1,6 @@
 import os
-from fastapi import FastAPI, HTTPException, Depends, status
+from decimal import Decimal
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.staticfiles import StaticFiles
@@ -14,11 +15,15 @@ from datetime import datetime, timedelta, date, time
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 import uuid
+from stripe import StripeClient, SignatureVerificationError
 
 # Security
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440 # 24 hours
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:4200")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -82,6 +87,16 @@ def parse_date_range(start_date: str, end_date: str) -> tuple[datetime, datetime
     start_dt = datetime.combine(start, time.min)
     end_dt = datetime.combine(end + timedelta(days=1), time.min)
     return start_dt, end_dt
+
+
+def _to_cents(value: Decimal | float | int) -> int:
+    return int(Decimal(str(value)) * 100)
+
+
+def _stripe_client() -> StripeClient:
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=500, detail="STRIPE_SECRET_KEY is not configured")
+    return StripeClient(STRIPE_SECRET_KEY)
 
 
 PAGE_WIDTH, PAGE_HEIGHT = letter
@@ -414,6 +429,136 @@ async def checkout(data: dict, db: AsyncSession = Depends(get_db)):
     cart.status = "procesado"
     await db.commit()
     return {"order_id": order.id, "total": total, "message": "Compra realizada"}
+
+
+@app.post("/api/payments/create-checkout-session")
+async def create_checkout_session(
+    payload: schemas.PaymentCheckoutRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(models.Cart).where(
+            models.Cart.user_id == current_user.id,
+            models.Cart.status == "activo",
+        )
+    )
+    cart = result.scalar_one_or_none()
+    if not cart:
+        raise HTTPException(status_code=404, detail="No active cart found")
+
+    items_stmt = (
+        select(models.CartItem, models.Product.name, models.Product.description)
+        .join(models.Product, models.Product.id == models.CartItem.product_id)
+        .where(models.CartItem.cart_id == cart.id)
+        .order_by(models.CartItem.id.asc())
+    )
+    cart_rows = (await db.execute(items_stmt)).all()
+    if not cart_rows:
+        raise HTTPException(status_code=400, detail="The cart is empty")
+
+    requested_items = {}
+    if payload and payload.items:
+        requested_items = {item.product_id: item.quantity for item in payload.items}
+
+    line_items = []
+    for cart_item, product_name, product_description in cart_rows:
+        if requested_items and requested_items.get(cart_item.product_id) not in (None, cart_item.quantity):
+            raise HTTPException(status_code=400, detail="Cart data does not match the payment request")
+        line_item = {
+            "price_data": {
+                "currency": "usd",
+                "product_data": {
+                    "name": product_name,
+                    "description": product_description or None,
+                },
+                "unit_amount": _to_cents(cart_item.price_at_time),
+            },
+            "quantity": cart_item.quantity,
+        }
+        line_items.append(line_item)
+
+    checkout_session = _stripe_client().v1.checkout.sessions.create(
+        params={
+            "mode": "payment",
+            "success_url": f"{FRONTEND_URL}/payment?status=success&session_id={{CHECKOUT_SESSION_ID}}",
+            "cancel_url": f"{FRONTEND_URL}/payment?status=cancelled",
+            "line_items": line_items,
+            "customer_email": current_user.email,
+            "metadata": {
+                "user_id": str(current_user.id),
+                "cart_id": str(cart.id),
+            },
+        }
+    )
+
+    if not checkout_session.url:
+        raise HTTPException(status_code=500, detail="Stripe did not return a checkout URL")
+
+    return {"checkout_url": checkout_session.url, "session_id": checkout_session.id}
+
+
+@app.post("/api/payments/webhook")
+async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+    payload = await request.body()
+    sig_header = request.headers.get("Stripe-Signature")
+    if not sig_header:
+        raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
+    if not STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(status_code=500, detail="STRIPE_WEBHOOK_SECRET is not configured")
+
+    try:
+        event = _stripe_client().construct_event(payload.decode("utf-8"), sig_header, STRIPE_WEBHOOK_SECRET)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid payload") from exc
+    except SignatureVerificationError as exc:
+        raise HTTPException(status_code=400, detail="Invalid signature") from exc
+
+    if event.type != "checkout.session.completed":
+        return {"received": True}
+
+    session = event.data.object
+    metadata = getattr(session, "metadata", {}) or {}
+    cart_id = metadata.get("cart_id")
+    user_id = metadata.get("user_id")
+    if not cart_id:
+        return {"received": True}
+
+    cart_result = await db.execute(
+        select(models.Cart).where(
+            models.Cart.id == int(cart_id),
+            models.Cart.status == "activo",
+        )
+    )
+    cart = cart_result.scalar_one_or_none()
+    if not cart:
+        return {"received": True}
+
+    items_result = await db.execute(select(models.CartItem).where(models.CartItem.cart_id == cart.id))
+    items = items_result.scalars().all()
+    total = sum(item.quantity * item.price_at_time for item in items)
+
+    order = models.Order(user_id=int(user_id or cart.user_id), total_amount=total)
+    db.add(order)
+    await db.flush()
+
+    for item in items:
+        detail = models.OrderDetail(
+            order_id=order.id,
+            product_id=item.product_id,
+            quantity=item.quantity,
+            price=item.price_at_time,
+        )
+        db.add(detail)
+        await db.execute(
+            update(models.Product)
+            .where(models.Product.id == item.product_id)
+            .values(stock=models.Product.stock - item.quantity)
+        )
+
+    cart.status = "procesado"
+    await db.commit()
+    return {"received": True}
 
 @app.get("/api/orders/admin", response_model=list[schemas.OrderAdminListItem])
 async def list_orders_admin(

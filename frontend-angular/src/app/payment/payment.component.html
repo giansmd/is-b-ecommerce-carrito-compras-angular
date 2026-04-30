@@ -1,0 +1,46 @@
+<div class="payment-page">
+  <h2>Resumen de pago</h2>
+
+  <div *ngIf="cart && cart.length > 0; else empty">
+    <table class="cart-table">
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>Cantidad</th>
+          <th>Precio unit.</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of cart">
+          <td>{{ item.name }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>{{ item.unitPrice | number: "1.2-2" }}</td>
+          <td>{{ item.unitPrice * item.quantity | number: "1.2-2" }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="summary">
+      <strong>Total: </strong> {{ total | number: "1.2-2" }}
+    </div>
+
+    <div class="actions">
+      <button (click)="backToStore()" class="btn">Volver</button>
+      <button
+        (click)="payWithStripe()"
+        class="btn primary"
+        [disabled]="loading"
+      >
+        {{ loading ? "Procesando..." : "Pagar con Stripe" }}
+      </button>
+    </div>
+
+    <div *ngIf="message" class="message">{{ message }}</div>
+  </div>
+
+  <ng-template #empty>
+    <p>El carrito está vacío. Añade productos desde la tienda.</p>
+    <button (click)="backToStore()" class="btn">Ir a la tienda</button>
+  </ng-template>
+</div>

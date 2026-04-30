@@ -194,6 +194,9 @@ docker compose -f docker-compose.prod.yml up --build -d
 
 - `DATABASE_URL`: DSN de PostgreSQL. En Docker Compose se usa `postgresql+asyncpg://postgres:password@postgres:5432/shopping_db`.
 - `SECRET_KEY`: clave para JWT.
+- `STRIPE_SECRET_KEY`: clave secreta de Stripe para crear Checkout Sessions.
+- `STRIPE_WEBHOOK_SECRET`: secreto del webhook para validar eventos de Stripe.
+- `FRONTEND_URL`: URL base del frontend, usada para `success_url` y `cancel_url`.
 
 **Frontend (Angular)**
 
@@ -326,6 +329,14 @@ Response: {"message":"Producto eliminado"}
 POST /api/cart/checkout
 Request: {"user_id":1}
 Response: {"order_id":1,"total":200,"message":"Compra realizada"}
+
+POST /api/payments/create-checkout-session
+Request: {}
+Response: {"checkout_url":"https://checkout.stripe.com/...","session_id":"cs_..."}
+
+POST /api/payments/webhook
+Request: evento firmado por Stripe
+Response: {"received":true}
 Reportes PDF
 http
 POST /api/reports/operational

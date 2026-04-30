@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from datetime import datetime
 from decimal import Decimal
@@ -49,6 +49,17 @@ class CartItemAdd(BaseModel):
     user_id: int
     product_id: int
     quantity: int
+
+class PaymentCheckoutItem(BaseModel):
+    product_id: int
+    quantity: int
+
+class PaymentCheckoutRequest(BaseModel):
+    items: List[PaymentCheckoutItem] = Field(default_factory=list)
+
+class PaymentCheckoutResponse(BaseModel):
+    checkout_url: str
+    session_id: str
 
 class OrderResponse(BaseModel):
     id: int

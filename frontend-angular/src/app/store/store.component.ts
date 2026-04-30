@@ -36,7 +36,10 @@ export class StoreComponent implements OnInit {
   }
 
   get cartTotal(): number {
-    return this.cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+    return this.cart.reduce(
+      (sum, item) => sum + item.unitPrice * item.quantity,
+      0,
+    );
   }
 
   get productImagePreviewUrl(): string {
@@ -55,7 +58,9 @@ export class StoreComponent implements OnInit {
     this.checkSession();
     const today = new Date();
     const end = today.toISOString().slice(0, 10);
-    const start = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const start = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
     this.reportStartDate = start;
     this.reportEndDate = end;
   }
@@ -138,7 +143,12 @@ export class StoreComponent implements OnInit {
         this.showProductForm = false;
         alert(this.editingProduct ? "Producto actualizado" : "Producto creado");
       },
-      error: () => alert(this.editingProduct ? "Error al actualizar producto" : "Error al crear producto"),
+      error: () =>
+        alert(
+          this.editingProduct
+            ? "Error al actualizar producto"
+            : "Error al crear producto",
+        ),
     });
   }
 
@@ -155,20 +165,26 @@ export class StoreComponent implements OnInit {
 
   addToCart(product: Product) {
     if (!this.isLoggedIn) return alert("Debes iniciar sesión");
-    if (this.isAdmin) return alert("Solo usuarios cliente pueden agregar productos al carrito");
+    if (this.isAdmin)
+      return alert("Solo usuarios cliente pueden agregar productos al carrito");
 
     const desiredQuantity = this.getRequestedQuantity(product.id);
     const availableStock = this.getAvailableStockForCart(product.id);
-    if (availableStock <= 0) return alert("No hay stock disponible para agregar más unidades");
+    if (availableStock <= 0)
+      return alert("No hay stock disponible para agregar más unidades");
 
     if (desiredQuantity > availableStock) {
       this.requestedQuantities[product.id] = availableStock;
-      return alert(`Solo hay ${availableStock} unidad(es) disponibles para este producto`);
+      return alert(
+        `Solo hay ${availableStock} unidad(es) disponibles para este producto`,
+      );
     }
 
     this.cartApi.addToCart(product.id, desiredQuantity).subscribe({
       next: () => {
-        const existing = this.cart.find((item) => item.productId === product.id);
+        const existing = this.cart.find(
+          (item) => item.productId === product.id,
+        );
         if (existing) {
           existing.quantity += desiredQuantity;
           existing.maxStock = product.stock;
@@ -182,7 +198,10 @@ export class StoreComponent implements OnInit {
           });
         }
         const newAvailableStock = this.getAvailableStockForCart(product.id);
-        this.requestedQuantities[product.id] = newAvailableStock > 0 ? Math.min(desiredQuantity, newAvailableStock) : 1;
+        this.requestedQuantities[product.id] =
+          newAvailableStock > 0
+            ? Math.min(desiredQuantity, newAvailableStock)
+            : 1;
         alert("Producto agregado al carrito");
       },
       error: (error) => {
@@ -198,15 +217,8 @@ export class StoreComponent implements OnInit {
 
   checkout() {
     if (!this.validateCartAgainstStock()) return;
-    this.cartApi.checkout().subscribe({
-      next: (res) => {
-        this.cart = [];
-        this.requestedQuantities = {};
-        this.loadProducts();
-        alert(`Compra realizada. Pedido #${res.order_id}. Total: ${res.total}`);
-      },
-      error: () => alert("No se pudo procesar el checkout"),
-    });
+    // Navegar a la nueva página de pago y pasar el carrito en el estado de navegación
+    this.router.navigate(["/payment"], { state: { cart: this.cart } });
   }
 
   getRequestedQuantity(productId: number): number {
@@ -222,15 +234,24 @@ export class StoreComponent implements OnInit {
     const parsed = Number(rawValue);
     const safeValue = Number.isFinite(parsed) ? Math.floor(parsed) : 1;
     const max = Math.max(1, this.getAvailableStockForCart(product.id));
-    this.requestedQuantities[product.id] = Math.min(Math.max(safeValue, 1), max);
+    this.requestedQuantities[product.id] = Math.min(
+      Math.max(safeValue, 1),
+      max,
+    );
   }
 
   increaseRequestedQuantity(product: Product): void {
-    this.setRequestedQuantity(product, this.getRequestedQuantity(product.id) + 1);
+    this.setRequestedQuantity(
+      product,
+      this.getRequestedQuantity(product.id) + 1,
+    );
   }
 
   decreaseRequestedQuantity(product: Product): void {
-    this.setRequestedQuantity(product, this.getRequestedQuantity(product.id) - 1);
+    this.setRequestedQuantity(
+      product,
+      this.getRequestedQuantity(product.id) - 1,
+    );
   }
 
   getAvailableStockForCart(productId: number): number {
@@ -245,10 +266,12 @@ export class StoreComponent implements OnInit {
   }
 
   generateOperationalReport() {
-    this.cartApi.generateOperationalReport(this.reportStartDate, this.reportEndDate).subscribe({
-      next: (res) => this.openPdf(res.pdf_url),
-      error: () => alert("No se pudo generar el reporte operacional"),
-    });
+    this.cartApi
+      .generateOperationalReport(this.reportStartDate, this.reportEndDate)
+      .subscribe({
+        next: (res) => this.openPdf(res.pdf_url),
+        error: () => alert("No se pudo generar el reporte operacional"),
+      });
   }
 
   generateManagementReport() {
@@ -275,7 +298,8 @@ export class StoreComponent implements OnInit {
     this.products.forEach((product) => {
       const available = this.getAvailableStockForCart(product.id);
       const currentDesired = this.getRequestedQuantity(product.id);
-      this.requestedQuantities[product.id] = available > 0 ? Math.min(currentDesired, available) : 1;
+      this.requestedQuantities[product.id] =
+        available > 0 ? Math.min(currentDesired, available) : 1;
     });
   }
 
@@ -288,7 +312,9 @@ export class StoreComponent implements OnInit {
         return false;
       }
       if (item.quantity > product.stock) {
-        alert(`Stock insuficiente para ${item.name}. Máximo disponible: ${product.stock}.`);
+        alert(
+          `Stock insuficiente para ${item.name}. Máximo disponible: ${product.stock}.`,
+        );
         this.syncCartWithCurrentStock();
         return false;
       }

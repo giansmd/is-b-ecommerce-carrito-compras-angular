@@ -146,7 +146,8 @@
             <span>${{ cartTotal }}</span>
           </div>
           <div *ngIf="cart.length > 0">
-            <button class="btn btn-primary w-100" (click)="checkout()">Pagar Ahora</button>
+            <button class="btn btn-primary w-100" (click)="checkout()">Ir a pago con Stripe</button>
+            <small class="d-block text-muted mt-2">Este paso abre la nueva página de pago antes de finalizar la compra.</small>
           </div>
           <div *ngIf="cart.length === 0" class="text-center text-muted">El carrito está vacío</div>
           <div *ngIf="isAdmin">
