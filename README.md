@@ -332,7 +332,7 @@ Response: {"order_id":1,"total":200,"message":"Compra realizada"}
 
 POST /api/payments/create-checkout-session
 Request: {}
-Response: {"checkout_url":"https://checkout.stripe.com/...","session_id":"cs_..."}
+Response: {"checkout*url":"https://checkout.stripe.com/...","session_id":"cs*..."}
 
 POST /api/payments/webhook
 Request: evento firmado por Stripe
